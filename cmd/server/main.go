@@ -46,7 +46,6 @@ func (s *MemStorage) AddCounter(name string, value int64) {
 func updateMetric(w http.ResponseWriter, req *http.Request, storage Storage) {
 	metricType := req.PathValue("metricType")
 	key, rawValue := req.PathValue("key"), req.PathValue("value")
-
 	switch metricType {
 	case Counter:
 		value, err := strconv.ParseInt(rawValue, 10, 64)
