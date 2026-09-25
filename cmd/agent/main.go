@@ -15,7 +15,7 @@ import (
 const (
 	pollInterval   int    = 2
 	reportInterval int    = 10
-	baseServerUrl  string = "http://localhost:8080/update"
+	baseServerURL  string = "http://localhost:8080/update"
 )
 
 type metricStorage struct {
@@ -80,17 +80,17 @@ func (storage *metricStorage) collect(polling bool, interval int) {
 	}
 }
 
-func SendRequests(client *http.Client, snapshot metricSnapshot, baseUrl string) {
+func SendRequests(client *http.Client, snapshot metricSnapshot, baseURL string) {
 	gauges, counters := snapshot.gauges, snapshot.counters
 	for name, value := range gauges {
-		url := fmt.Sprintf("%s/gauge/%s/%f", baseUrl, name, value)
+		url := fmt.Sprintf("%s/gauge/%s/%f", baseURL, name, value)
 		_, err := sendMetric(client, url)
 		if err != nil {
 			log.Println(err)
 		}
 	}
 	for name, value := range counters {
-		url := fmt.Sprintf("%s/counter/%s/%d", baseUrl, name, value)
+		url := fmt.Sprintf("%s/counter/%s/%d", baseURL, name, value)
 		_, err := sendMetric(client, url)
 		if err != nil {
 			log.Println(err)
@@ -126,6 +126,6 @@ func main() {
 	client := http.Client{}
 	for {
 		time.Sleep(time.Second * time.Duration(reportInterval))
-		SendRequests(&client, tempStorage.snapshot(), baseServerUrl)
+		SendRequests(&client, tempStorage.snapshot(), baseServerURL)
 	}
 }
