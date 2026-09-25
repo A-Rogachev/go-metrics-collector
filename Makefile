@@ -16,3 +16,10 @@ server:  ## Запуск сервера
 
 agent:
 	go run cmd/agent/main.go
+
+localtest:  ## Запуск юнит и интеграционных тестов
+	@echo "\n===============> Running agent tests\n"
+	cd ./cmd/agent && go test . -v
+	@echo "\n===============> Running server tests\n"
+	cd ./cmd/server && go test . -v
+	@echo "\n===============> All tests done"
