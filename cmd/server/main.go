@@ -54,7 +54,6 @@ func updateMetric(w http.ResponseWriter, req *http.Request, storage Storage) {
 			return
 		}
 		storage.AddCounter(key, value)
-
 	case Gauge:
 		value, err := strconv.ParseFloat(rawValue, 64)
 		if err != nil {
@@ -62,12 +61,10 @@ func updateMetric(w http.ResponseWriter, req *http.Request, storage Storage) {
 			return
 		}
 		storage.SetGauge(key, value)
-
 	default:
 		http.Error(w, "Invalid metric type", http.StatusBadRequest)
 		return
 	}
-
 	w.WriteHeader(http.StatusOK)
 }
 
