@@ -23,3 +23,6 @@ localtest:  ## Запуск юнит и интеграционных тесто�
 	@echo "\n===============> Running server tests\n"
 	cd ./cmd/server && go test . -v
 	@echo "\n===============> All tests done"
+
+statictest:  ## Запуск статического анализатора
+	go vet -vettool=$$(pwd)/.tools/statictest ./...

@@ -73,7 +73,7 @@ func (storage *metricStorage) collect(polling bool, interval int) {
 		}
 		storage.counters["PollCount"]++
 		storage.mutex.Unlock()
-		if polling == false {
+		if !polling {
 			return
 		}
 		time.Sleep(time.Second * time.Duration(interval))
