@@ -27,3 +27,5 @@ vendor/
 # go vet tool
 .tools
 
+# other files
+temp.file
