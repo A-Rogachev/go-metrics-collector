@@ -5,6 +5,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/labstack/echo/v5"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -50,7 +51,7 @@ func TestStatusHandler(t *testing.T) {
 			method: http.MethodPost,
 			want: want{
 				code:        http.StatusNotFound,
-				contentType: "text/plain; charset=utf-8",
+				contentType: "application/json",
 				hasGauge:    false,
 			},
 		},
@@ -60,7 +61,7 @@ func TestStatusHandler(t *testing.T) {
 			method: http.MethodPost,
 			want: want{
 				code:        http.StatusBadRequest,
-				contentType: "text/plain; charset=utf-8",
+				contentType: "application/json",
 				hasGauge:    false,
 			},
 		},
@@ -82,7 +83,7 @@ func TestStatusHandler(t *testing.T) {
 			method: http.MethodPost,
 			want: want{
 				code:        http.StatusBadRequest,
-				contentType: "text/plain; charset=utf-8",
+				contentType: "application/json",
 			},
 		},
 		{
@@ -91,20 +92,20 @@ func TestStatusHandler(t *testing.T) {
 			method: http.MethodGet,
 			want: want{
 				code:        http.StatusMethodNotAllowed,
-				contentType: "text/plain; charset=utf-8",
+				contentType: "application/json",
 			},
 		},
 	}
 	storage := NewMemStorage()
-	mux := http.NewServeMux()
-	mux.HandleFunc("POST /update/{metricType}/{key}/{value}", func(w http.ResponseWriter, r *http.Request) {
-		updateMetric(w, r, storage)
+	e := echo.New()
+	e.POST("/update/:metricType/:key/:value", func(c *echo.Context) error {
+		return updateMetric(c, storage)
 	})
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			req := httptest.NewRequest(test.method, test.url, nil)
 			rec := httptest.NewRecorder()
-			mux.ServeHTTP(rec, req)
+			e.ServeHTTP(rec, req)
 
 			assert.Equal(t, test.want.code, rec.Code, "statuc code doesnt match")
 			assert.Equal(t, test.want.contentType, rec.Header().Get("Content-Type"), "content type doesnt match")

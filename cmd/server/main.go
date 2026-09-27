@@ -4,11 +4,18 @@ import (
 	"net/http"
 	"strconv"
 	"sync"
+
+	"github.com/labstack/echo/v5"
 )
 
 const (
 	Counter = "counter"
 	Gauge   = "gauge"
+)
+
+const (
+	InvalidMetricTypeMsg  = "Invalid metric type"
+	InvalidMetricValueMsg = "Invalid metric value"
 )
 
 type Storage interface {
@@ -68,30 +75,29 @@ func handleGaugeMetric(key string, rawValue string, storage Storage) error {
 	return nil
 }
 
-func updateMetric(w http.ResponseWriter, req *http.Request, storage Storage) {
-	metricType := req.PathValue("metricType")
-	key, rawValue := req.PathValue("key"), req.PathValue("value")
+func updateMetric(c *echo.Context, storage Storage) error {
+	metricType := c.Param("metricType")
+	key, rawValue := c.Param("key"), c.Param("value")
 	handler, ok := metricHandlers[metricType]
 	if !ok {
-		http.Error(w, "Invalid metric type", http.StatusBadRequest)
-		return
+		c.Logger().Error(InvalidMetricTypeMsg, "metricType", metricType)
+		return echo.NewHTTPError(http.StatusBadRequest, InvalidMetricTypeMsg)
 	}
 	if err := handler(key, rawValue, storage); err != nil {
-		http.Error(w, "Invalid value", http.StatusBadRequest)
-		return
+		c.Logger().Error(InvalidMetricValueMsg, "metricValue", rawValue)
+		return echo.NewHTTPError(http.StatusBadRequest, InvalidMetricValueMsg)
 	}
-	w.WriteHeader(http.StatusOK)
+	return c.NoContent(http.StatusOK)
 }
 
 func main() {
+	e := echo.New()
 	storage := NewMemStorage()
-	mux := http.NewServeMux()
-	mux.HandleFunc(`POST /update/{metricType}/{key}/{value}`, func(w http.ResponseWriter, r *http.Request) {
-		updateMetric(w, r, storage)
-	})
-	err := http.ListenAndServe(`:8080`, mux)
-	if err != nil {
-		panic(err)
-	}
 
+	e.POST("/update/:metricType/:key/:value", func(c *echo.Context) error {
+		return updateMetric(c, storage)
+	})
+	if err := e.Start(":8080"); err != nil {
+		e.Logger.Error("failed to start server", "error", err)
+	}
 }
