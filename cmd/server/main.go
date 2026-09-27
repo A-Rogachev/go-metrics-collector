@@ -43,26 +43,41 @@ func (s *MemStorage) AddCounter(name string, value int64) {
 	s.counters[name] += value
 }
 
+type metricHandler func(key string, rawValue string, storage Storage) error
+
+var metricHandlers = map[string]metricHandler{
+	Counter: handleCounterMetric,
+	Gauge:   handleGaugeMetric,
+}
+
+func handleCounterMetric(key string, rawValue string, storage Storage) error {
+	value, err := strconv.ParseInt(rawValue, 10, 64)
+	if err != nil {
+		return err
+	}
+	storage.AddCounter(key, value)
+	return nil
+}
+
+func handleGaugeMetric(key string, rawValue string, storage Storage) error {
+	value, err := strconv.ParseFloat(rawValue, 64)
+	if err != nil {
+		return err
+	}
+	storage.SetGauge(key, value)
+	return nil
+}
+
 func updateMetric(w http.ResponseWriter, req *http.Request, storage Storage) {
 	metricType := req.PathValue("metricType")
 	key, rawValue := req.PathValue("key"), req.PathValue("value")
-	switch metricType {
-	case Counter:
-		value, err := strconv.ParseInt(rawValue, 10, 64)
-		if err != nil {
-			http.Error(w, "Invalid value", http.StatusBadRequest)
-			return
-		}
-		storage.AddCounter(key, value)
-	case Gauge:
-		value, err := strconv.ParseFloat(rawValue, 64)
-		if err != nil {
-			http.Error(w, "Invalid value", http.StatusBadRequest)
-			return
-		}
-		storage.SetGauge(key, value)
-	default:
+	handler, ok := metricHandlers[metricType]
+	if !ok {
 		http.Error(w, "Invalid metric type", http.StatusBadRequest)
+		return
+	}
+	if err := handler(key, rawValue, storage); err != nil {
+		http.Error(w, "Invalid value", http.StatusBadRequest)
 		return
 	}
 	w.WriteHeader(http.StatusOK)

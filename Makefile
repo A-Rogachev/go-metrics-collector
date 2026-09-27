@@ -21,11 +21,11 @@ agent:
 	go run cmd/agent/main.go
 
 localtest:  ## Запуск юнит и интеграционных тестов
-	@echo "\n===============> Running agent tests\n"
+	@echo "\n| ===============> Running agent tests <=============== |\n"
 	cd ./cmd/agent && go test . -v
-	@echo "\n===============> Running server tests\n"
+	@echo "\n| ===============> Running server tests <=============== |\n"
 	cd ./cmd/server && go test . -v
-	@echo "\n===============> All tests done"
+	@echo "\n| ===============> All TESTS PASSED <=============== |"
 
 statictest:  ## Запуск статического анализатора
 	go vet -vettool=$$(pwd)/.tools/statictest ./...
