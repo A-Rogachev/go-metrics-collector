@@ -123,6 +123,6 @@ func main() {
 	client := http.Client{}
 	for {
 		time.Sleep(time.Second * time.Duration(reportInterval))
-		SendRequests(&client, tempStorage.snapshot(), apiAddress+"/update")
+		SendRequests(&client, tempStorage.snapshot(), "http://"+apiAddress+"/update")
 	}
 }
