@@ -11,6 +11,9 @@ test1:  ## Запуск тестов для итерации 1
 test2:  ## Запуск тестов для итерации 2
 	metricstest -test.v -test.run=^TestIteration2[AB]*$$ -source-path=. -agent-binary-path=cmd/agent/agent
 
+test3:   ## Запуск тестов для итерации 3
+	metricstest -test.v -test.run=^TestIteration3[AB]*$$ -source-path=. -agent-binary-path=cmd/agent/agent -binary-path=cmd/server/server
+
 server:  ## Запуск сервера
 	go run cmd/server/main.go
 
