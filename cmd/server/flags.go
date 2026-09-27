@@ -4,7 +4,6 @@ import (
 	"flag"
 )
 
-// адрес и порт для запуска сервера
 var serverAddress string
 
 func parseFlags() {

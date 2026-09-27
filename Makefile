@@ -15,7 +15,7 @@ test3:   ## Запуск тестов для итерации 3
 	metricstest -test.v -test.run=^TestIteration3[AB]*$$ -source-path=. -agent-binary-path=cmd/agent/agent -binary-path=cmd/server/server
 
 test4:
-	SERVER_PORT=8123; \
+	SERVER_PORT=8080; \
 	ADDRESS="localhost:$${SERVER_PORT}"; \
 	TEMP_FILE=$$(./temp.file); \
 	metricstest -test.v -test.run=^TestIteration4$$ \
@@ -29,7 +29,7 @@ server:  ## Запуск сервера
 	go run ./cmd/server/
 
 agent:
-	go run cmd/agent/main.go
+	go run ./cmd/agent/
 
 localtest:  ## Запуск юнит и интеграционных тестов
 	@echo "\n| ===============> Running agent tests <=============== |\n"
@@ -42,7 +42,7 @@ build-server:  ## Компиляция сервера
 	go build -o ./cmd/server/server ./cmd/server/
 
 build-agent:  ## Компиляция агента
-	go build -o ./cmd/agent/agent ./cms/agent/
+	go build -o ./cmd/agent/agent ./cmd/agent/
 
 statictest:  ## Запуск статического анализатора
 	go vet -vettool=$$(pwd)/.tools/statictest ./...

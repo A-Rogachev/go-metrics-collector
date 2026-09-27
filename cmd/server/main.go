@@ -171,7 +171,7 @@ func main() {
 	e := echo.New()
 	storage := NewMemStorage()
 
-	e.POST("/update/:metricType/:key/:value", func(c *echo.Context) error {
+	e.POST("update/:metricType/:key/:value", func(c *echo.Context) error {
 		return updateMetric(c, storage)
 	})
 	e.GET("value/:metricType/:key", func(c *echo.Context) error {

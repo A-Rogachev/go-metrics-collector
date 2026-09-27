@@ -12,12 +12,6 @@ import (
 	"time"
 )
 
-const (
-	pollInterval   int    = 2
-	reportInterval int    = 10
-	baseServerURL  string = "http://localhost:8080/update"
-)
-
 type metricStorage struct {
 	mutex    sync.RWMutex
 	gauges   map[string]float64
@@ -76,6 +70,7 @@ func (storage *metricStorage) collect(polling bool, interval int) {
 		if !polling {
 			return
 		}
+		log.Println("got metrics --------")
 		time.Sleep(time.Second * time.Duration(interval))
 	}
 }
@@ -116,16 +111,18 @@ func sendMetric(client *http.Client, url string) (bool, error) {
 }
 
 func main() {
+	parseFlags()
 	tempStorage := metricStorage{
 		gauges:   make(map[string]float64),
 		counters: map[string]int64{"PollCount": 0},
 	}
 
+	fmt.Println(reportInterval, apiAddress, pollInterval)
 	go tempStorage.collect(true, pollInterval)
 
 	client := http.Client{}
 	for {
 		time.Sleep(time.Second * time.Duration(reportInterval))
-		SendRequests(&client, tempStorage.snapshot(), baseServerURL)
+		SendRequests(&client, tempStorage.snapshot(), apiAddress+"/update")
 	}
 }
