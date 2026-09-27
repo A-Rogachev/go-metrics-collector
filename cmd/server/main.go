@@ -167,6 +167,7 @@ func getAllMetrics(c *echo.Context, storage Storage) error {
 }
 
 func main() {
+	parseFlags()
 	e := echo.New()
 	storage := NewMemStorage()
 
@@ -179,7 +180,7 @@ func main() {
 	e.GET("/", func(c *echo.Context) error {
 		return getAllMetrics(c, storage)
 	})
-	if err := e.Start(":8080"); err != nil {
+	if err := e.Start(serverAddress); err != nil {
 		e.Logger.Error("failed to start server", "error", err)
 	}
 }

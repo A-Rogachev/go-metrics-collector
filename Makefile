@@ -26,7 +26,7 @@ test4:
 
 
 server:  ## Запуск сервера
-	go run cmd/server/main.go
+	go run ./cmd/server/
 
 agent:
 	go run cmd/agent/main.go
@@ -37,6 +37,12 @@ localtest:  ## Запуск юнит и интеграционных тесто�
 	@echo "\n| ===============> Running server tests <=============== |\n"
 	cd ./cmd/server && go test . -v
 	@echo "\n| ===============> All TESTS PASSED <=============== |"
+
+build-server:  ## Компиляция сервера
+	go build -o ./cmd/server/server ./cmd/server/
+
+build-agent:  ## Компиляция агента
+	go build -o ./cmd/agent/agent ./cms/agent/
 
 statictest:  ## Запуск статического анализатора
 	go vet -vettool=$$(pwd)/.tools/statictest ./...
