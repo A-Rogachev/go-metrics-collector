@@ -3,17 +3,19 @@ package main
 import (
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"maps"
 	"math/rand"
 	"net/http"
 	"runtime"
 	"sync"
 	"time"
+
+	"github.com/A-Rogachev/go-metrics-collector/internal/config"
 )
 
 type metricStorage struct {
-	mutex    sync.RWMutex
+	mutex    sync.Mutex
 	gauges   map[string]float64
 	counters map[string]int64
 }
@@ -24,10 +26,22 @@ type metricSnapshot struct {
 }
 
 func (storage *metricStorage) snapshot() metricSnapshot {
-	storage.mutex.RLock()
+	storage.mutex.Lock()
 	gauges, counters := maps.Clone(storage.gauges), maps.Clone(storage.counters)
-	storage.mutex.RUnlock()
+	storage.mutex.Unlock()
 	return metricSnapshot{gauges, counters}
+}
+
+func (storage *metricStorage) subtractCounters(sentCounters map[string]int64) {
+	storage.mutex.Lock()
+	defer storage.mutex.Unlock()
+
+	for key, value := range sentCounters {
+		storage.counters[key] -= value
+		if storage.counters[key] < 0 {
+			storage.counters[key] = 0
+		}
+	}
 }
 
 func (storage *metricStorage) collect(polling bool, interval int) {
@@ -70,59 +84,64 @@ func (storage *metricStorage) collect(polling bool, interval int) {
 		if !polling {
 			return
 		}
-		log.Println("got metrics --------")
 		time.Sleep(time.Second * time.Duration(interval))
 	}
 }
 
-func SendRequests(client *http.Client, snapshot metricSnapshot, baseURL string) {
-	gauges, counters := snapshot.gauges, snapshot.counters
-	for name, value := range gauges {
-		url := fmt.Sprintf("%s/gauge/%s/%f", baseURL, name, value)
-		_, err := sendMetric(client, url)
-		if err != nil {
-			log.Println(err)
+func SendRequests(client *http.Client, snapshot metricSnapshot, baseURL string) map[string]int64 {
+	sentCounters := make(map[string]int64, 0)
+	for key, value := range snapshot.gauges {
+		url := fmt.Sprintf("%s/gauge/%s/%f", baseURL, key, value)
+		if err := sendMetric(client, url); err != nil {
+			slog.Debug(err.Error())
 		}
 	}
-	for name, value := range counters {
-		url := fmt.Sprintf("%s/counter/%s/%d", baseURL, name, value)
-		_, err := sendMetric(client, url)
-		if err != nil {
-			log.Println(err)
+	for key, value := range snapshot.counters {
+		url := fmt.Sprintf("%s/counter/%s/%d", baseURL, key, value)
+		if err := sendMetric(client, url); err != nil {
+			slog.Debug(err.Error())
+			continue
 		}
+		sentCounters[key] = value
 	}
-	log.Println("metrics sent")
+	slog.Info("Metrics sent to the server")
+	return sentCounters
 }
 
-func sendMetric(client *http.Client, url string) (bool, error) {
+func sendMetric(client *http.Client, url string) error {
 	response, err := client.Post(url, "text/plain", nil)
 	if err != nil {
-		return false, err
-	}
-	if response.StatusCode != http.StatusOK {
-		return false, fmt.Errorf("unexpected status: %d", response.StatusCode)
+		return err
 	}
 	defer response.Body.Close()
+
+	if response.StatusCode != http.StatusOK {
+		return fmt.Errorf("unexpected status: %d", response.StatusCode)
+	}
 	_, err = io.Copy(io.Discard, response.Body)
 	if err != nil {
-		return false, err
+		return err
 	}
-	return true, nil
+	return nil
 }
 
 func main() {
-	parseFlags()
+	cfg := config.GetAgentConfig()
+	setupLogger(cfg.Additional.LogLevel)
+
 	tempStorage := metricStorage{
 		gauges:   make(map[string]float64),
 		counters: map[string]int64{"PollCount": 0},
 	}
 
-	fmt.Println(reportInterval, apiAddress, pollInterval)
-	go tempStorage.collect(true, pollInterval)
+	go tempStorage.collect(true, cfg.PollConfig.PollInterval)
 
 	client := http.Client{}
 	for {
-		time.Sleep(time.Second * time.Duration(reportInterval))
-		SendRequests(&client, tempStorage.snapshot(), "http://"+apiAddress+"/update")
+		time.Sleep(time.Second * time.Duration(cfg.ReportConfig.ReportInterval))
+
+		snapshot := tempStorage.snapshot()
+		sentCounters := SendRequests(&client, snapshot, "http://"+cfg.APIConfig.Address+"/update")
+		tempStorage.subtractCounters(sentCounters)
 	}
 }

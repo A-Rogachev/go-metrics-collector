@@ -29,13 +29,13 @@ server:  ## Запуск сервера
 	go run ./cmd/server/
 
 agent:
-	go run ./cmd/agent/
+	go run ./cmd/agent/ -log-level=info
 
 localtest:  ## Запуск юнит и интеграционных тестов
 	@echo "\n| ===============> Running agent tests <=============== |\n"
-	cd ./cmd/agent && go test . -v
+	go test ./cmd/agent -v
 	@echo "\n| ===============> Running server tests <=============== |\n"
-	cd ./cmd/server && go test . -v
+	go test ./cmd/server -v
 	@echo "\n| ===============> All TESTS PASSED <=============== |"
 
 build-server:  ## Компиляция сервера
@@ -46,3 +46,6 @@ build-agent:  ## Компиляция агента
 
 statictest:  ## Запуск статического анализатора
 	go vet -vettool=$$(pwd)/.tools/statictest ./...
+
+alltest:  ## Запуск локальных и cicd тестов
+	make localtest && make statictest

@@ -1,12 +1,16 @@
 package main
 
 import (
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
 	"testing"
 
+	handlers "github.com/A-Rogachev/go-metrics-collector/internal/handler"
+	models "github.com/A-Rogachev/go-metrics-collector/internal/model"
+	mem_storage "github.com/A-Rogachev/go-metrics-collector/internal/storage"
 	"github.com/labstack/echo/v5"
 	"github.com/stretchr/testify/assert"
 )
@@ -93,10 +97,10 @@ func TestUpdateMetrics(t *testing.T) {
 			},
 		},
 	}
-	storage := NewMemStorage()
+	storage := mem_storage.NewMemStorage()
 	e := echo.New()
 	e.POST("/update/:metricType/:key/:value", func(c *echo.Context) error {
-		return updateMetric(c, storage)
+		return handlers.UpdateMetric(c, storage)
 	})
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -108,15 +112,15 @@ func TestUpdateMetrics(t *testing.T) {
 			assert.Equal(t, test.want.contentType, w.Header().Get("Content-Type"), "content type doesnt match")
 
 			if test.want.hasGauge {
-				value, ok := storage.gauges[test.want.gaugeKey]
-				assert.True(t, ok, "gauge key should be saved")
-				assert.Equal(t, test.want.gaugeValue, value, "gauge value doesn't match")
+				value, err := storage.GetStringValue(models.Gauge, test.want.gaugeKey)
+				assert.NoError(t, err, "gauge key should be saved")
+				assert.Equal(t, strconv.FormatFloat(test.want.gaugeValue, 'f', -1, 64), value, "gauge value doesn't match")
 			}
 
 			if test.want.hasCounter {
-				value, ok := storage.counters[test.want.counterKey]
-				assert.True(t, ok, "counter key should be saved")
-				assert.Equal(t, test.want.counterValue, value, "counter value doesn't match")
+				value, err := storage.GetStringValue(models.Counter, test.want.counterKey)
+				assert.NoError(t, err, "counter key should be saved")
+				assert.Equal(t, strconv.FormatInt(test.want.counterValue, 10), value, "counter value doesn't match")
 			}
 
 		})
@@ -182,12 +186,12 @@ func TestGetMetricValue(t *testing.T) {
 			},
 		},
 	}
-	storage := NewMemStorage()
-	storage.gauges[gaugeKey] = gaugeValue
-	storage.counters[counterKey] = counterValue
+	storage := mem_storage.NewMemStorage()
+	storage.SetGauge(gaugeKey, gaugeValue)
+	storage.AddCounter(counterKey, counterValue)
 	e := echo.New()
 	e.GET("value/:metricType/:key", func(c *echo.Context) error {
-		return getMetricValue(c, storage)
+		return handlers.GetMetricValue(c, storage)
 	})
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -208,20 +212,21 @@ func TestGetMetricValue(t *testing.T) {
 func TestGetAllMetrics(t *testing.T) {
 
 	var (
-		gaugeValue             = 1.23
-		gaugeKey               = "Alloc"
-		counterValue     int64 = 3
-		counterKey             = "pollCount"
-		metricsURL             = "/"
-		expectedResponse       = "<html><body>Alloc: 1.23<br>pollCount: 3<br></body></html>"
+		gaugeKey           = "Alloc"
+		gaugeValue         = 1.23
+		counterKey         = "pollCount"
+		counterValue int64 = 3
+
+		metricsURL = "/"
 	)
 
-	storage := NewMemStorage()
-	storage.gauges[gaugeKey] = gaugeValue
-	storage.counters[counterKey] = counterValue
+	storage := mem_storage.NewMemStorage()
+	storage.SetGauge(gaugeKey, gaugeValue)
+	storage.AddCounter(counterKey, counterValue)
+
 	e := echo.New()
 	e.GET(metricsURL, func(c *echo.Context) error {
-		return getAllMetrics(c, storage)
+		return handlers.GetAllMetrics(c, storage)
 	})
 
 	w := httptest.NewRecorder()
@@ -232,5 +237,6 @@ func TestGetAllMetrics(t *testing.T) {
 
 	assert.NoError(t, err)
 	assert.Equal(t, http.StatusOK, res.StatusCode, "statuc code doesnt match")
-	assert.Equal(t, expectedResponse, string(resBody))
+	assert.Contains(t, string(resBody), fmt.Sprint(gaugeKey, ": ", gaugeValue))
+	assert.Contains(t, string(resBody), fmt.Sprint(counterKey, ": ", counterValue))
 }

@@ -46,7 +46,7 @@ func TestSendRequests(t *testing.T) {
 		counters: map[string]int64{"PollCount": 2},
 	}
 
-	SendRequests(client, snapshot, server.URL+"/update")
+	_ = SendRequests(client, snapshot, server.URL+"/update")
 
 	assert.ElementsMatch(t, []string{
 		"/update/gauge/Alloc/1.230000",
@@ -82,9 +82,8 @@ func TestSendMetric(t *testing.T) {
 			defer server.Close()
 
 			client := server.Client()
-			success, err := sendMetric(client, server.URL+"/update/gauge/1/2")
+			err := sendMetric(client, server.URL+"/update/gauge/1/2")
 
-			assert.Equal(t, test.wantSuccess, success, "error while sending metric")
 			assert.Equal(t, test.wantErr, err != nil, "error while sending metric")
 		})
 	}
