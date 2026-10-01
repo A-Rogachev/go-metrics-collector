@@ -20,9 +20,8 @@ func parseLogLevel(level string) slog.Level {
 	}
 }
 
-func setupLogger(level string) {
-	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+func getLogger(level string) *slog.Logger {
+	return slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
 		Level: parseLogLevel(level),
 	}))
-	slog.SetDefault(logger)
 }

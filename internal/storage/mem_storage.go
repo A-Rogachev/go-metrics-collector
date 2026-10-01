@@ -9,11 +9,6 @@ import (
 	models "github.com/A-Rogachev/go-metrics-collector/internal/model"
 )
 
-type MetricSnapshot struct {
-	Gauges   map[string]float64
-	Counters map[string]int64
-}
-
 type MemStorage struct {
 	mu       sync.Mutex
 	gauges   map[string]float64
@@ -63,10 +58,10 @@ func (s *MemStorage) GetStringValue(metricType string, key string) (string, erro
 	}
 }
 
-func (s *MemStorage) Snapshot() MetricSnapshot {
+func (s *MemStorage) Snapshot() models.MetricSnapshot {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return MetricSnapshot{
+	return models.MetricSnapshot{
 		Gauges:   maps.Clone(s.gauges),
 		Counters: maps.Clone(s.counters),
 	}

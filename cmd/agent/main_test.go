@@ -5,11 +5,12 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	models "github.com/A-Rogachev/go-metrics-collector/internal/model"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestMetricStorageCollect(t *testing.T) {
-	storage := metricStorage{
+	storage := AgentStorage{
 		gauges:   make(map[string]float64),
 		counters: map[string]int64{"PollCount": int64(0)},
 	}
@@ -22,13 +23,13 @@ func TestMetricStorageCollect(t *testing.T) {
 }
 
 func TestMetricStorageSnapshot(t *testing.T) {
-	storage := metricStorage{
+	storage := AgentStorage{
 		gauges:   map[string]float64{"Alloc": 123456},
 		counters: map[string]int64{"PollCount": int64(1)},
 	}
 	storageSnapshot := storage.snapshot()
-	assert.Equal(t, storageSnapshot.gauges["Alloc"], float64(123456), "Alloc should be 123456")
-	assert.Equal(t, storageSnapshot.counters["PollCount"], int64(1), "PollCount should be 1")
+	assert.Equal(t, storageSnapshot.Gauges["Alloc"], float64(123456), "Alloc should be 123456")
+	assert.Equal(t, storageSnapshot.Counters["PollCount"], int64(1), "PollCount should be 1")
 }
 
 func TestSendRequests(t *testing.T) {
@@ -41,12 +42,13 @@ func TestSendRequests(t *testing.T) {
 	defer server.Close()
 
 	client := server.Client()
-	snapshot := metricSnapshot{
-		gauges:   map[string]float64{"Alloc": 1.23},
-		counters: map[string]int64{"PollCount": 2},
+	snapshot := models.MetricSnapshot{
+		Gauges:   map[string]float64{"Alloc": 1.23},
+		Counters: map[string]int64{"PollCount": 2},
 	}
 
-	_ = SendRequests(client, snapshot, server.URL+"/update")
+	logger := getLogger("info")
+	_ = SendRequests(client, logger, snapshot, server.URL+"/update")
 
 	assert.ElementsMatch(t, []string{
 		"/update/gauge/Alloc/1.230000",

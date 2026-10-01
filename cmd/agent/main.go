@@ -12,27 +12,23 @@ import (
 	"time"
 
 	"github.com/A-Rogachev/go-metrics-collector/internal/config"
+	models "github.com/A-Rogachev/go-metrics-collector/internal/model"
 )
 
-type metricStorage struct {
+type AgentStorage struct {
 	mutex    sync.Mutex
 	gauges   map[string]float64
 	counters map[string]int64
 }
 
-type metricSnapshot struct {
-	gauges   map[string]float64
-	counters map[string]int64
-}
-
-func (storage *metricStorage) snapshot() metricSnapshot {
+func (storage *AgentStorage) snapshot() models.MetricSnapshot {
 	storage.mutex.Lock()
 	gauges, counters := maps.Clone(storage.gauges), maps.Clone(storage.counters)
 	storage.mutex.Unlock()
-	return metricSnapshot{gauges, counters}
+	return models.MetricSnapshot{Gauges: gauges, Counters: counters}
 }
 
-func (storage *metricStorage) subtractCounters(sentCounters map[string]int64) {
+func (storage *AgentStorage) subtractCounters(sentCounters map[string]int64) {
 	storage.mutex.Lock()
 	defer storage.mutex.Unlock()
 
@@ -44,7 +40,7 @@ func (storage *metricStorage) subtractCounters(sentCounters map[string]int64) {
 	}
 }
 
-func (storage *metricStorage) collect(polling bool, interval int) {
+func (storage *AgentStorage) collect(polling bool, interval int) {
 	for {
 		m := runtime.MemStats{}
 		runtime.ReadMemStats(&m)
@@ -88,23 +84,23 @@ func (storage *metricStorage) collect(polling bool, interval int) {
 	}
 }
 
-func SendRequests(client *http.Client, snapshot metricSnapshot, baseURL string) map[string]int64 {
+func SendRequests(client *http.Client, logger *slog.Logger, snapshot models.MetricSnapshot, baseURL string) map[string]int64 {
 	sentCounters := make(map[string]int64, 0)
-	for key, value := range snapshot.gauges {
+	for key, value := range snapshot.Gauges {
 		url := fmt.Sprintf("%s/gauge/%s/%f", baseURL, key, value)
 		if err := sendMetric(client, url); err != nil {
-			slog.Debug(err.Error())
+			logger.Debug(err.Error())
 		}
 	}
-	for key, value := range snapshot.counters {
+	for key, value := range snapshot.Counters {
 		url := fmt.Sprintf("%s/counter/%s/%d", baseURL, key, value)
 		if err := sendMetric(client, url); err != nil {
-			slog.Debug(err.Error())
+			logger.Debug(err.Error())
 			continue
 		}
 		sentCounters[key] = value
 	}
-	slog.Info("Metrics sent to the server")
+	logger.Info("Metrics sent to the server")
 	return sentCounters
 }
 
@@ -127,9 +123,9 @@ func sendMetric(client *http.Client, url string) error {
 
 func main() {
 	cfg := config.GetAgentConfig()
-	setupLogger(cfg.Additional.LogLevel)
+	logger := getLogger(cfg.Additional.LogLevel)
 
-	tempStorage := metricStorage{
+	tempStorage := AgentStorage{
 		gauges:   make(map[string]float64),
 		counters: map[string]int64{"PollCount": 0},
 	}
@@ -141,7 +137,7 @@ func main() {
 		time.Sleep(time.Second * time.Duration(cfg.ReportConfig.ReportInterval))
 
 		snapshot := tempStorage.snapshot()
-		sentCounters := SendRequests(&client, snapshot, "http://"+cfg.APIConfig.Address+"/update")
+		sentCounters := SendRequests(&client, logger, snapshot, "http://"+cfg.APIConfig.Address+"/update")
 		tempStorage.subtractCounters(sentCounters)
 	}
 }

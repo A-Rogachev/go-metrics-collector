@@ -8,7 +8,6 @@ import (
 	"github.com/labstack/echo/v5"
 
 	models "github.com/A-Rogachev/go-metrics-collector/internal/model"
-	mem_storage "github.com/A-Rogachev/go-metrics-collector/internal/storage"
 )
 
 const (
@@ -21,7 +20,7 @@ type Storage interface {
 	SetGauge(name string, value float64)
 	AddCounter(name string, value int64)
 	GetStringValue(metricType string, key string) (string, error)
-	Snapshot() mem_storage.MetricSnapshot
+	Snapshot() models.MetricSnapshot
 }
 
 type metricHandler func(key string, rawValue string, storage Storage) error
