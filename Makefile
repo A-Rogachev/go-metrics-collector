@@ -34,6 +34,16 @@ test5:  ## Запуск тестов для итерации 5
 	    -server-port=$$SERVER_PORT \
 	    -source-path=.
 
+test6:  ## Запуск тестов для итерации 6
+	SERVER_PORT=8080; \
+	ADDRESS="localhost:$${SERVER_PORT}"; \
+	TEMP_FILE=$$(./temp.file); \
+	metricstest -test.v -test.run=^TestIteration6$$ \
+	-agent-binary-path=cmd/agent/agent \
+	-binary-path=cmd/server/server \
+	-server-port=$$SERVER_PORT \
+	-source-path=.
+
 server:  ## Запуск сервера
 	go run ./cmd/server/
 
