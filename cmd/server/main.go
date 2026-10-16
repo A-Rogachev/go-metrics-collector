@@ -6,6 +6,7 @@ import (
 	"github.com/A-Rogachev/go-metrics-collector/internal/config"
 	handlers "github.com/A-Rogachev/go-metrics-collector/internal/handler"
 	mem_storage "github.com/A-Rogachev/go-metrics-collector/internal/storage"
+	"github.com/go-playground/validator/v10"
 	"github.com/labstack/echo/v5"
 	"github.com/labstack/echo/v5/middleware"
 )
@@ -17,6 +18,7 @@ func main() {
 	logger := getLogger(cfg.LogLevel)
 
 	e := echo.New()
+	e.Validator = &handlers.MetricValidator{Validator: validator.New()}
 	e.Use(middleware.RequestLoggerWithConfig(middleware.RequestLoggerConfig{
 		LogURI:           true,
 		LogMethod:        true,
@@ -38,7 +40,12 @@ func main() {
 			return nil
 		},
 	}))
-
+	e.POST("update", func(c *echo.Context) error {
+		return handlers.UpdateMetricJSON(c, storage)
+	})
+	e.POST("value", func(c *echo.Context) error {
+		return handlers.GetAllMetricsJSON(c, storage)
+	})
 	e.POST("update/:metricType/:key/:value", func(c *echo.Context) error {
 		return handlers.UpdateMetric(c, storage)
 	})
@@ -48,6 +55,7 @@ func main() {
 	e.GET("/", func(c *echo.Context) error {
 		return handlers.GetAllMetrics(c, storage)
 	})
+
 	if err := e.Start(cfg.ServerAddress); err != nil {
 		logger.Fatal().Msg(fmt.Sprintf("failed to start server: %s", err))
 	}
