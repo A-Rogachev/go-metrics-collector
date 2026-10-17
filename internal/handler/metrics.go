@@ -24,12 +24,13 @@ type Storage interface {
 	SetGauge(name string, value float64)
 	AddCounter(name string, value int64)
 	GetStringValue(metricType string, key string) (string, error)
+	GetNumberValue(metricType string, value string) (any, error)
 	Snapshot() models.MetricSnapshot
 }
 
 type metricHandler func(key string, rawValue string, storage Storage) error
 
-type metricJSONHandler func(metric models.Metrics, storage Storage) error
+type metricJSONHandler func(metric models.Metric, storage Storage) error
 
 var metricHandlers = map[string]metricHandler{
 	models.Counter: handleCounterMetric,
@@ -41,7 +42,7 @@ var metricJSONHandlers = map[string]metricJSONHandler{
 	models.Gauge:   handleGaugeJSONMetric,
 }
 
-func handleGaugeJSONMetric(metric models.Metrics, storage Storage) error {
+func handleGaugeJSONMetric(metric models.Metric, storage Storage) error {
 	if metric.Value == nil {
 		return fmt.Errorf("gauge value is required")
 	}
@@ -50,7 +51,7 @@ func handleGaugeJSONMetric(metric models.Metrics, storage Storage) error {
 	return nil
 }
 
-func handleCounterJSONMetric(metric models.Metrics, storage Storage) error {
+func handleCounterJSONMetric(metric models.Metric, storage Storage) error {
 	if metric.Delta == nil {
 		return fmt.Errorf("counter delta is required")
 	}
@@ -129,7 +130,7 @@ func GetAllMetrics(c *echo.Context, storage Storage) error {
 }
 
 func UpdateMetricJSON(c *echo.Context, storage Storage) error {
-	var newMetric models.Metrics
+	var newMetric models.Metric
 
 	if err := c.Bind(&newMetric); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, JSONParsingError)
@@ -158,7 +159,29 @@ func UpdateMetricJSON(c *echo.Context, storage Storage) error {
 	return c.NoContent(http.StatusOK)
 }
 
-func GetAllMetricsJSON(c *echo.Context, storage Storage) error {
-	c.Response().WriteHeader(http.StatusOK)
-	return metricsTemplate.Execute(c.Response(), storage.Snapshot())
+func GetMetricValueJSON(c *echo.Context, storage Storage) error {
+	var askedMetric models.GetMetricRequest
+
+	if err := c.Bind(&askedMetric); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, JSONParsingError)
+	}
+	value, err := storage.GetStringValue(askedMetric.MType, askedMetric.ID)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusNotFound, "Metric key not found")
+	}
+	result, err := storage.GetNumberValue(askedMetric.MType, value)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "Metric value error")
+	}
+	response := models.Metric{
+		ID:    askedMetric.ID,
+		MType: askedMetric.MType,
+	}
+	switch value := result.(type) {
+	case float64:
+		response.Value = &value
+	case int64:
+		response.Delta = &value
+	}
+	return c.JSON(http.StatusOK, response)
 }

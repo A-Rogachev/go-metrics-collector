@@ -40,11 +40,11 @@ func main() {
 			return nil
 		},
 	}))
-	e.POST("update", func(c *echo.Context) error {
+	e.POST("update/", func(c *echo.Context) error {
 		return handlers.UpdateMetricJSON(c, storage)
 	})
-	e.POST("value", func(c *echo.Context) error {
-		return handlers.GetAllMetricsJSON(c, storage)
+	e.POST("value/", func(c *echo.Context) error {
+		return handlers.GetMetricValueJSON(c, storage)
 	})
 	e.POST("update/:metricType/:key/:value", func(c *echo.Context) error {
 		return handlers.UpdateMetric(c, storage)

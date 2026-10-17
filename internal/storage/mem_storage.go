@@ -58,6 +58,25 @@ func (s *MemStorage) GetStringValue(metricType string, key string) (string, erro
 	}
 }
 
+func (s *MemStorage) GetNumberValue(metricType string, value string) (any, error) {
+	var result any
+	var err error
+
+	switch metricType {
+	case models.Gauge:
+		result, err = strconv.ParseFloat(value, 64)
+		if err != nil {
+			return float64(0.0), fmt.Errorf("error while converting metric")
+		}
+	case models.Counter:
+		result, err = strconv.ParseInt(value, 10, 64)
+		if err != nil {
+			return int64(0), fmt.Errorf("error while converting metric")
+		}
+	}
+	return result, nil
+}
+
 func (s *MemStorage) Snapshot() models.MetricSnapshot {
 	s.mu.Lock()
 	defer s.mu.Unlock()
