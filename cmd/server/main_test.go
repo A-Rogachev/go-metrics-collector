@@ -1,12 +1,16 @@
 package main
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
 	"testing"
+
+	"github.com/go-playground/validator/v10"
 
 	handlers "github.com/A-Rogachev/go-metrics-collector/internal/handler"
 	models "github.com/A-Rogachev/go-metrics-collector/internal/model"
@@ -15,7 +19,12 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+const skipTestMessage string = "=================== skipping test in short mode"
+
 func TestUpdateMetrics(t *testing.T) {
+	if testing.Short() {
+		t.Skip(skipTestMessage)
+	}
 	type want struct {
 		code        int
 		contentType string
@@ -128,6 +137,9 @@ func TestUpdateMetrics(t *testing.T) {
 }
 
 func TestGetMetricValue(t *testing.T) {
+	if testing.Short() {
+		t.Skip(skipTestMessage)
+	}
 
 	var (
 		gaugeValue         = 1.23
@@ -210,6 +222,9 @@ func TestGetMetricValue(t *testing.T) {
 }
 
 func TestGetAllMetrics(t *testing.T) {
+	if testing.Short() {
+		t.Skip(skipTestMessage)
+	}
 
 	var (
 		gaugeKey           = "Alloc"
@@ -239,4 +254,257 @@ func TestGetAllMetrics(t *testing.T) {
 	assert.Equal(t, http.StatusOK, res.StatusCode, "statuc code doesnt match")
 	assert.Contains(t, string(resBody), fmt.Sprint(gaugeKey, ": ", gaugeValue))
 	assert.Contains(t, string(resBody), fmt.Sprint(counterKey, ": ", counterValue))
+}
+
+func TestUpdateMetricJSON(t *testing.T) {
+
+	var (
+		gaugeValue   = float64(1.23)
+		counterValue = int64(3)
+		URL          = "/update/"
+	)
+	type expected struct {
+		statusCode   int
+		gaugeValue   float64
+		counterValue int64
+	}
+	tests := []struct {
+		name        string
+		requestBody models.Metric
+		isGauge     bool
+		isCounter   bool
+		expected    expected
+		contentType string
+	}{
+		{
+			name: "update valid gauge metric #1",
+			requestBody: models.Metric{
+				ID:    "gaugeKey1",
+				MType: "gauge",
+				Value: &gaugeValue,
+			},
+			isGauge: true,
+			expected: expected{
+				statusCode: http.StatusOK,
+				gaugeValue: float64(1.23),
+			},
+			contentType: "application/json",
+		},
+		{
+			name: "update valid counter metric #2",
+			requestBody: models.Metric{
+				ID:    "counterKey1",
+				MType: "counter",
+				Delta: &counterValue,
+			},
+			isCounter: true,
+			expected: expected{
+				statusCode:   http.StatusOK,
+				counterValue: int64(3),
+			},
+			contentType: "application/json",
+		},
+		{
+			name: "update valid counter metric again #3",
+			requestBody: models.Metric{
+				ID:    "counterKey1",
+				MType: "counter",
+				Delta: &counterValue,
+			},
+			isCounter: true,
+			expected: expected{
+				statusCode:   http.StatusOK,
+				counterValue: int64(counterValue * 2),
+			},
+			contentType: "application/json",
+		},
+		{
+			name: "invalid request body (type) #4",
+			requestBody: models.Metric{
+				ID:    "counterKey1",
+				MType: "counter!",
+			},
+			expected: expected{
+				statusCode: http.StatusBadRequest,
+			},
+			contentType: "application/json",
+		},
+		{
+			name: "invalid content type #5",
+			requestBody: models.Metric{
+				ID:    "counterKey1",
+				MType: "counter",
+				Delta: &counterValue,
+			},
+			expected: expected{
+				statusCode: http.StatusBadRequest,
+			},
+			contentType: "text/plain",
+		},
+	}
+
+	storage := mem_storage.NewMemStorage()
+
+	e := echo.New()
+	e.Validator = &handlers.MetricValidator{Validator: validator.New()}
+	e.POST("update/", func(c *echo.Context) error {
+		return handlers.UpdateMetricJSON(c, storage)
+	})
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			body, _ := json.Marshal(test.requestBody)
+			request := httptest.NewRequest(http.MethodPost, URL, bytes.NewBuffer(body))
+			request.Header.Set("Content-Type", test.contentType)
+
+			e.ServeHTTP(w, request)
+
+			assert.Equal(t, test.expected.statusCode, w.Code)
+			if test.isGauge {
+				stringValue := strconv.FormatFloat(test.expected.gaugeValue, 'f', -1, 64)
+				valueFromStorage, _ := storage.GetNumberValue(models.Gauge, stringValue)
+				assert.Equal(t, valueFromStorage, test.expected.gaugeValue)
+			}
+			if test.isCounter {
+				stringValue := strconv.FormatInt(test.expected.counterValue, 10)
+				valueFromStorage, _ := storage.GetNumberValue(models.Counter, stringValue)
+				assert.Equal(t, valueFromStorage, test.expected.counterValue)
+			}
+		})
+	}
+
+}
+
+func TestGetMetricValueJSON(t *testing.T) {
+	if testing.Short() {
+		t.Skip(skipTestMessage)
+	}
+
+	var (
+		gaugeKey           = "Alloc"
+		gaugeValue         = 1.23
+		counterValue int64 = 3
+		counterKey         = "pollCount"
+
+		URL = "/value/"
+	)
+	type expected struct {
+		statusCode int
+		hasDelta   bool
+		hasValue   bool
+		value      float64
+		delta      int64
+	}
+	tests := []struct {
+		name        string
+		requestBody models.GetMetricRequest
+		expected    expected
+		contentType string
+	}{
+		{
+			name: "valid request and metric exists #1",
+			requestBody: models.GetMetricRequest{
+				ID:    gaugeKey,
+				MType: "gauge",
+			},
+			expected: expected{
+				statusCode: http.StatusOK,
+				hasValue:   true,
+				value:      gaugeValue,
+			},
+			contentType: "application/json",
+		},
+		{
+			name: "valid request and metric exists #2",
+			requestBody: models.GetMetricRequest{
+				ID:    counterKey,
+				MType: "counter",
+			},
+			expected: expected{
+				statusCode: http.StatusOK,
+				hasDelta:   true,
+				delta:      int64(counterValue),
+			},
+			contentType: "application/json",
+		},
+		{
+			name: "invalid metric type #3",
+			requestBody: models.GetMetricRequest{
+				ID:    counterKey,
+				MType: "counterX",
+			},
+			expected: expected{
+				statusCode: http.StatusBadRequest,
+			},
+			contentType: "application/json",
+		},
+		{
+			name: "invalid metric key #4",
+			requestBody: models.GetMetricRequest{
+				ID:    counterKey + "!",
+				MType: "counter",
+			},
+			expected: expected{
+				statusCode: http.StatusNotFound,
+			},
+			contentType: "application/json",
+		},
+		{
+			name: "invalid request (missed ID field) #5",
+			requestBody: models.GetMetricRequest{
+				MType: "counter",
+			},
+			expected: expected{
+				statusCode: http.StatusBadRequest,
+			},
+			contentType: "application/json",
+		},
+		{
+			name: "invalid request content type #6",
+			requestBody: models.GetMetricRequest{
+				MType: "counter",
+			},
+			expected: expected{
+				statusCode: http.StatusBadRequest,
+			},
+			contentType: "plain/text",
+		},
+	}
+
+	storage := mem_storage.NewMemStorage()
+	storage.SetGauge(gaugeKey, gaugeValue)
+	storage.AddCounter(counterKey, counterValue)
+
+	e := echo.New()
+	e.Validator = &handlers.MetricValidator{Validator: validator.New()}
+	e.POST(URL, func(c *echo.Context) error {
+		return handlers.GetMetricValueJSON(c, storage)
+	})
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			body, _ := json.Marshal(test.requestBody)
+			request := httptest.NewRequest(http.MethodPost, URL, bytes.NewBuffer(body))
+			request.Header.Set("Content-Type", test.contentType)
+
+			e.ServeHTTP(w, request)
+			res := w.Result()
+			defer res.Body.Close()
+			resBody, err := io.ReadAll(res.Body)
+			responseData := new(models.Metric)
+			json.Unmarshal(resBody, &responseData)
+
+			assert.NoError(t, err)
+			assert.Equal(t, test.expected.statusCode, res.StatusCode, "status code doesnt match")
+			assert.Equal(t, res.Header.Get("Content-type"), "application/json")
+			if test.expected.hasDelta {
+				assert.Equal(t, test.expected.delta, *responseData.Delta)
+			}
+			if test.expected.hasValue {
+				assert.Equal(t, test.expected.value, *responseData.Value)
+			}
+		})
+	}
 }

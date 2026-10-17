@@ -165,6 +165,24 @@ func GetMetricValueJSON(c *echo.Context, storage Storage) error {
 	if err := c.Bind(&askedMetric); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, JSONParsingError)
 	}
+	// TODO: вынести обработку ошибок в отдельный хелпер
+	if err := c.Validate(askedMetric); err != nil {
+		var validationErrors validator.ValidationErrors
+		if errors.As(err, &validationErrors) {
+			errorsResponse := make([]ValidationErrorResponse, 0, len(validationErrors))
+			for _, validationError := range validationErrors {
+				errorsResponse = append(errorsResponse, ValidationErrorResponse{
+					Field:   validationError.Field(),
+					Tag:     validationError.Tag(),
+					Value:   validationError.Value(),
+					Message: validationError.Error(),
+				})
+			}
+			return c.JSON(http.StatusBadRequest, map[string]any{
+				"errors": errorsResponse,
+			})
+		}
+	}
 	value, err := storage.GetStringValue(askedMetric.MType, askedMetric.ID)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusNotFound, "Metric key not found")
