@@ -173,7 +173,6 @@ func sendJSONMetric(client *http.Client, url string, body models.Metric) error {
 	return nil
 }
 
-// //////////////////////////////////////////////////
 func main() {
 	cfg := config.GetAgentConfig()
 	logger := getLogger(cfg.Additional.LogLevel)

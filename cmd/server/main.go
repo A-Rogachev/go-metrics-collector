@@ -5,10 +5,10 @@ import (
 
 	"github.com/A-Rogachev/go-metrics-collector/internal/config"
 	handlers "github.com/A-Rogachev/go-metrics-collector/internal/handler"
+	internal_middleware "github.com/A-Rogachev/go-metrics-collector/internal/middleware"
 	mem_storage "github.com/A-Rogachev/go-metrics-collector/internal/storage"
 	"github.com/go-playground/validator/v10"
 	"github.com/labstack/echo/v5"
-	"github.com/labstack/echo/v5/middleware"
 )
 
 func main() {
@@ -16,30 +16,15 @@ func main() {
 	cfg := config.GetServerConfig()
 	storage := mem_storage.NewMemStorage()
 	logger := getLogger(cfg.LogLevel)
+	appLogger := internal_middleware.ZerologAdapter{Logger: logger}
 
 	e := echo.New()
 	e.Validator = &handlers.MetricValidator{Validator: validator.New()}
-	e.Use(middleware.RequestLoggerWithConfig(middleware.RequestLoggerConfig{
-		LogURI:           true,
-		LogMethod:        true,
-		LogStatus:        true,
-		LogContentLength: true,
-		LogValuesFunc: func(c *echo.Context, v middleware.RequestLoggerValues) error {
-			message := fmt.Sprintf(
-				"%d %s %s (contentLength=%s)",
-				v.Status,
-				v.Method,
-				v.URI,
-				v.ContentLength,
-			)
-			if v.Error != nil {
-				logger.Error().Msg(message)
-			} else {
-				logger.Info().Msg(message)
-			}
-			return nil
-		},
-	}))
+
+	e.Use(internal_middleware.GetLoggingMiddleware(appLogger))
+	e.Use(internal_middleware.GzipRequestMiddleware)
+	e.Use(internal_middleware.GzipResponseMiddleware)
+
 	e.POST("update/", func(c *echo.Context) error {
 		return handlers.UpdateMetricJSON(c, storage)
 	})

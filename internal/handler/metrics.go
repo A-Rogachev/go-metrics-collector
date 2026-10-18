@@ -125,6 +125,7 @@ var metricsTemplate = template.Must(template.New("metrics").Funcs(template.FuncM
 </html>`))
 
 func GetAllMetrics(c *echo.Context, storage Storage) error {
+	c.Response().Header().Set("content-type", "text/html; charset=utf-8")
 	c.Response().WriteHeader(http.StatusOK)
 	return metricsTemplate.Execute(c.Response(), storage.Snapshot())
 }
