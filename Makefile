@@ -67,6 +67,13 @@ localtest:  ## Запуск юнит и интеграционных тесто�
 	go test ./cmd/server -v
 	@echo "\n| ===============> All TESTS PASSED <=============== |"
 
+short-test:  ## Запуск юнит и интеграционных тестов
+	@echo "\n| ===============> Running agent tests <=============== |\n"
+	go test ./cmd/agent -v --short
+	@echo "\n| ===============> Running server tests <=============== |\n"
+	go test ./cmd/server -v --short
+	@echo "\n| ===============> All TESTS PASSED <=============== |"
+
 build-server:  ## Компиляция сервера
 	go build -o ./cmd/server/server ./cmd/server/
 

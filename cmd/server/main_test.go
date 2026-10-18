@@ -257,6 +257,9 @@ func TestGetAllMetrics(t *testing.T) {
 }
 
 func TestUpdateMetricJSON(t *testing.T) {
+	if testing.Short() {
+		t.Skip(skipTestMessage)
+	}
 
 	var (
 		gaugeValue   = float64(1.23)
