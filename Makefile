@@ -24,6 +24,35 @@ test4:
 		-server-port=$$SERVER_PORT \
 		-source-path=.
 
+test5:  ## Запуск тестов для итерации 5
+	SERVER_PORT=8080; \
+	ADDRESS="localhost:$${SERVER_PORT}"; \
+	TEMP_FILE=$$(./temp.file); \
+	metricstest -test.v -test.run=^TestIteration5$$ \
+	    -agent-binary-path=cmd/agent/agent \
+		-binary-path=cmd/server/server \
+	    -server-port=$$SERVER_PORT \
+	    -source-path=.
+
+test6:  ## Запуск тестов для итерации 6
+	SERVER_PORT=8080; \
+	ADDRESS="localhost:$${SERVER_PORT}"; \
+	TEMP_FILE=$$(./temp.file); \
+	metricstest -test.v -test.run=^TestIteration6$$ \
+	-agent-binary-path=cmd/agent/agent \
+	-binary-path=cmd/server/server \
+	-server-port=$$SERVER_PORT \
+	-source-path=.
+
+test7:  ## Запуск тестов для итерации 7
+	SERVER_PORT=8080; \
+	ADDRESS="localhost:$${SERVER_PORT}"; \
+	TEMP_FILE=$$(./temp.file); \
+	metricstest -test.v -test.run=^TestIteration7$$ \
+	-agent-binary-path=cmd/agent/agent \
+	-binary-path=cmd/server/server \
+	-server-port=$$SERVER_PORT \
+	-source-path=.
 
 server:  ## Запуск сервера
 	go run ./cmd/server/
@@ -36,6 +65,13 @@ localtest:  ## Запуск юнит и интеграционных тесто�
 	go test ./cmd/agent -v
 	@echo "\n| ===============> Running server tests <=============== |\n"
 	go test ./cmd/server -v
+	@echo "\n| ===============> All TESTS PASSED <=============== |"
+
+short-test:  ## Запуск юнит и интеграционных тестов
+	@echo "\n| ===============> Running agent tests <=============== |\n"
+	go test ./cmd/agent -v --short
+	@echo "\n| ===============> Running server tests <=============== |\n"
+	go test ./cmd/server -v --short
 	@echo "\n| ===============> All TESTS PASSED <=============== |"
 
 build-server:  ## Компиляция сервера

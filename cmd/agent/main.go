@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bytes"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
@@ -121,6 +123,57 @@ func sendMetric(client *http.Client, url string) error {
 	return nil
 }
 
+func SendJSONRequests(client *http.Client, logger *slog.Logger, snapshot models.MetricSnapshot, baseURL string) map[string]int64 {
+	sentCounters := make(map[string]int64, 0)
+	url := baseURL + "/"
+	for key, value := range snapshot.Gauges {
+		reqBody := models.Metric{
+			ID:    key,
+			MType: models.Gauge,
+			Value: &value,
+		}
+		if err := sendJSONMetric(client, url, reqBody); err != nil {
+			logger.Debug(err.Error())
+		}
+	}
+	for key, value := range snapshot.Counters {
+		reqBody := models.Metric{
+			ID:    key,
+			MType: models.Counter,
+			Delta: &value,
+		}
+		if err := sendJSONMetric(client, url, reqBody); err != nil {
+			logger.Debug(err.Error())
+			continue
+		}
+		sentCounters[key] = value
+	}
+	logger.Info("Metrics sent to the server")
+	return sentCounters
+}
+
+func sendJSONMetric(client *http.Client, url string, body models.Metric) error {
+	reqBody, err := json.Marshal(body)
+	if err != nil {
+		return err
+	}
+	response, err := client.Post(url, "application/json", bytes.NewBuffer(reqBody))
+	if err != nil {
+		return err
+	}
+	defer response.Body.Close()
+
+	if response.StatusCode != http.StatusOK {
+		return fmt.Errorf("unexpected status: %d", response.StatusCode)
+	}
+	_, err = io.Copy(io.Discard, response.Body)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// //////////////////////////////////////////////////
 func main() {
 	cfg := config.GetAgentConfig()
 	logger := getLogger(cfg.Additional.LogLevel)
@@ -137,7 +190,9 @@ func main() {
 		time.Sleep(time.Second * time.Duration(cfg.ReportConfig.ReportInterval))
 
 		snapshot := tempStorage.snapshot()
-		sentCounters := SendRequests(&client, logger, snapshot, "http://"+cfg.APIConfig.Address+"/update")
+		sentCounters := SendJSONRequests(&client, logger, snapshot, "http://"+cfg.APIConfig.Address+"/update")
+		// NOTE: старая реализация с отправкой метрик через параметры запроса
+		//sentCounters := SendRequests(&client, logger, snapshot, "http://"+cfg.APIConfig.Address+"/update")
 		tempStorage.subtractCounters(sentCounters)
 	}
 }
