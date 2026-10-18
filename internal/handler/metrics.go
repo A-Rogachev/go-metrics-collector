@@ -136,6 +136,7 @@ func UpdateMetricJSON(c *echo.Context, storage Storage) error {
 		return echo.NewHTTPError(http.StatusBadRequest, JSONParsingError)
 	}
 	if err := c.Validate(newMetric); err != nil {
+		fmt.Println(err)
 		var validationErrors validator.ValidationErrors
 		if errors.As(err, &validationErrors) {
 			errorsResponse := make([]ValidationErrorResponse, 0, len(validationErrors))
@@ -154,6 +155,7 @@ func UpdateMetricJSON(c *echo.Context, storage Storage) error {
 	}
 	handler, _ := metricJSONHandlers[newMetric.MType]
 	if err := handler(newMetric, storage); err != nil {
+		fmt.Println(err)
 		return echo.NewHTTPError(http.StatusBadRequest, InvalidMetricValueMsg)
 	}
 	return c.NoContent(http.StatusOK)
