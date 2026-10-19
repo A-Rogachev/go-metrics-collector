@@ -1,15 +1,23 @@
 package main
 
 import (
+	"compress/gzip"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	models "github.com/A-Rogachev/go-metrics-collector/internal/model"
+
 	"github.com/stretchr/testify/assert"
 )
 
+const skipTestMessage string = "=================== skipping test in short mode"
+
 func TestMetricStorageCollect(t *testing.T) {
+	if testing.Short() {
+		t.Skip(skipTestMessage)
+	}
 	storage := AgentStorage{
 		gauges:   make(map[string]float64),
 		counters: map[string]int64{"PollCount": int64(0)},
@@ -33,6 +41,10 @@ func TestMetricStorageSnapshot(t *testing.T) {
 }
 
 func TestSendRequests(t *testing.T) {
+	if testing.Short() {
+		t.Skip(skipTestMessage)
+	}
+
 	var fromAgent []string // пути запросов от агента к серверу
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -57,6 +69,10 @@ func TestSendRequests(t *testing.T) {
 }
 
 func TestSendMetric(t *testing.T) {
+	if testing.Short() {
+		t.Skip(skipTestMessage)
+	}
+
 	tests := []struct {
 		name        string
 		serverCode  int
@@ -89,4 +105,96 @@ func TestSendMetric(t *testing.T) {
 			assert.Equal(t, test.wantErr, err != nil, "error while sending metric")
 		})
 	}
+}
+
+func TestSendJSONMetric(t *testing.T) {
+	if testing.Short() {
+		t.Skip(skipTestMessage)
+	}
+	var gaugeValue = float64(1.23)
+	tests := []struct {
+		name        string
+		serverCode  int
+		wantErr     bool
+		requestBody models.Metric
+	}{
+		{
+			name:       "successful JSON request test #1",
+			serverCode: http.StatusOK,
+			requestBody: models.Metric{
+				ID:    "gaugeKey1",
+				MType: "gauge",
+				Value: &gaugeValue,
+			},
+		},
+		{
+			name:       "invalid JSON body test #2",
+			serverCode: http.StatusBadRequest,
+			wantErr:    true,
+			requestBody: models.Metric{
+				ID:    "gaugeKey1",
+				MType: "gauge",
+				Value: &gaugeValue,
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(test.serverCode)
+			}))
+			defer server.Close()
+
+			client := server.Client()
+			err := sendJSONMetric(client, server.URL+"/update/", test.requestBody)
+
+			assert.Equal(t, test.wantErr, err != nil, "error while sending metric")
+		})
+	}
+}
+
+func TestSendJSONRequests(t *testing.T) {
+	if testing.Short() {
+		t.Skip(skipTestMessage)
+	}
+
+	var received []string
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+
+		gzipReader, err := gzip.NewReader(r.Body)
+		assert.NoError(t, err)
+		defer gzipReader.Close()
+
+		body, err := io.ReadAll(gzipReader)
+		assert.NoError(t, err)
+
+		// NOTE: реализация без gzip
+		// body, err := io.ReadAll(r.Body)
+		// assert.NoError(t, err)
+
+		received = append(received, string(body))
+		w.WriteHeader(http.StatusOK)
+
+		// NOTE:проверка заголовков сжатия gzip
+		assert.Equal(t, "gzip", r.Header.Get("Content-Encoding"))
+		assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
+	}))
+	defer server.Close()
+
+	client := server.Client()
+	snapshot := models.MetricSnapshot{
+		Gauges:   map[string]float64{"Alloc": 1.23},
+		Counters: map[string]int64{"PollCount": 2},
+	}
+	expected := []string{
+		`{"id":"Alloc","type":"gauge","value":1.23}`,
+		`{"id":"PollCount","type":"counter","delta":2}`,
+	}
+	logger := getLogger("info")
+	_ = SendJSONRequests(client, logger, snapshot, server.URL+"/update/")
+
+	assert.JSONEq(t, expected[0], received[0])
+	assert.JSONEq(t, expected[1], received[1])
+
 }
