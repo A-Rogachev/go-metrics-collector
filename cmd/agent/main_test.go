@@ -1,12 +1,14 @@
 package main
 
 import (
+	"compress/gzip"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	models "github.com/A-Rogachev/go-metrics-collector/internal/model"
+
 	"github.com/stretchr/testify/assert"
 )
 
@@ -159,11 +161,24 @@ func TestSendJSONRequests(t *testing.T) {
 	var received []string
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		body, err := io.ReadAll(r.Body)
+
+		gzipReader, err := gzip.NewReader(r.Body)
 		assert.NoError(t, err)
+		defer gzipReader.Close()
+
+		body, err := io.ReadAll(gzipReader)
+		assert.NoError(t, err)
+
+		// NOTE: реализация без gzip
+		// body, err := io.ReadAll(r.Body)
+		// assert.NoError(t, err)
 
 		received = append(received, string(body))
 		w.WriteHeader(http.StatusOK)
+
+		// NOTE:проверка заголовков сжатия gzip
+		assert.Equal(t, "gzip", r.Header.Get("Content-Encoding"))
+		assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
 	}))
 	defer server.Close()
 
@@ -181,4 +196,5 @@ func TestSendJSONRequests(t *testing.T) {
 
 	assert.JSONEq(t, expected[0], received[0])
 	assert.JSONEq(t, expected[1], received[1])
+
 }

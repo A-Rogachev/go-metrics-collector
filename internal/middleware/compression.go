@@ -118,8 +118,6 @@ func GzipRequestMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 		}
 		request.Body = &compressReader{r: request.Body, zr: gzipReader}
 		request.Header.Del("Content-Encoding")
-		request.Header.Del("Content-Length")
-		request.ContentLength = -1 // размер body неизвестен
 		defer request.Body.Close()
 		return next(c)
 	}

@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"compress/gzip"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -152,12 +153,49 @@ func SendJSONRequests(client *http.Client, logger *slog.Logger, snapshot models.
 	return sentCounters
 }
 
+// TODO: remove if not used (doesnt use gzip)
+// func sendJSONMetric(client *http.Client, url string, body models.Metric) error {
+// 	reqBody, err := json.Marshal(body)
+// 	if err != nil {
+// 		return err
+// 	}
+// 	response, err := client.Post(url, "application/json", bytes.NewBuffer(reqBody))
+// 	if err != nil {
+// 		return err
+// 	}
+// 	defer response.Body.Close()
+
+// 	if response.StatusCode != http.StatusOK {
+// 		return fmt.Errorf("unexpected status: %d", response.StatusCode)
+// 	}
+// 	_, err = io.Copy(io.Discard, response.Body)
+// 	if err != nil {
+// 		return err
+// 	}
+// 	return nil
+// }
+
 func sendJSONMetric(client *http.Client, url string, body models.Metric) error {
-	reqBody, err := json.Marshal(body)
+	jsonBody, err := json.Marshal(body)
 	if err != nil {
 		return err
 	}
-	response, err := client.Post(url, "application/json", bytes.NewBuffer(reqBody))
+
+	var compressedBody bytes.Buffer
+	gzipWriter := gzip.NewWriter(&compressedBody)
+	if _, err := gzipWriter.Write(jsonBody); err != nil {
+		return err
+	}
+	if err := gzipWriter.Close(); err != nil {
+		return err
+	}
+	request, err := http.NewRequest(http.MethodPost, url, &compressedBody)
+	if err != nil {
+		return err
+	}
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Content-Encoding", "gzip")
+	response, err := client.Do(request)
 	if err != nil {
 		return err
 	}
