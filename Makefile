@@ -64,6 +64,17 @@ test8:  ## Запуск тестов для итерации 8
 	-server-port=$$SERVER_PORT \
 	-source-path=.
 
+test9:  ## Запуск тестов для итерации 9
+	SERVER_PORT=8080; \
+	ADDRESS="localhost:$${SERVER_PORT}"; \
+	TEMP_FILE=$$(./temp.file); \
+	metricstest -test.v -test.run=^TestIteration9$$ \
+	-agent-binary-path=cmd/agent/agent \
+	-binary-path=cmd/server/server \
+    -file-storage-path=$$TEMP_FILE \
+	-server-port=$$SERVER_PORT \
+	-source-path=.
+
 server:  ## Запуск сервера
 	go run ./cmd/server/
 
