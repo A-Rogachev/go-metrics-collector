@@ -67,7 +67,7 @@ test8:  ## Запуск тестов для итерации 8
 test9:  ## Запуск тестов для итерации 9
 	SERVER_PORT=8080; \
 	ADDRESS="localhost:$${SERVER_PORT}"; \
-	TEMP_FILE=$$(./temp.file); \
+	TEMP_FILE=$$(mktemp); \
 	metricstest -test.v -test.run=^TestIteration9$$ \
 	-agent-binary-path=cmd/agent/agent \
 	-binary-path=cmd/server/server \
@@ -76,7 +76,7 @@ test9:  ## Запуск тестов для итерации 9
 	-source-path=.
 
 server:  ## Запуск сервера
-	go run ./cmd/server/
+	go run ./cmd/server/ -i=5 -r=false
 
 agent:
 	go run ./cmd/agent/ -log-level=info

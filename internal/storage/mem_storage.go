@@ -85,3 +85,11 @@ func (s *MemStorage) Snapshot() models.MetricSnapshot {
 		Counters: maps.Clone(s.counters),
 	}
 }
+
+func (s *MemStorage) LoadFromSnapshot(snapshot models.MetricSnapshot) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.gauges = snapshot.Gauges
+	s.counters = snapshot.Counters
+	return nil
+}

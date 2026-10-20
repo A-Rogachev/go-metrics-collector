@@ -14,7 +14,7 @@ import (
 
 	handlers "github.com/A-Rogachev/go-metrics-collector/internal/handler"
 	models "github.com/A-Rogachev/go-metrics-collector/internal/model"
-	mem_storage "github.com/A-Rogachev/go-metrics-collector/internal/storage"
+	int_storage "github.com/A-Rogachev/go-metrics-collector/internal/storage"
 	"github.com/labstack/echo/v5"
 	"github.com/stretchr/testify/assert"
 )
@@ -106,10 +106,11 @@ func TestUpdateMetrics(t *testing.T) {
 			},
 		},
 	}
-	storage := mem_storage.NewMemStorage()
+	storage := int_storage.NewMemStorage()
+	fileStorage := int_storage.NewFileStorage("", 0)
 	e := echo.New()
 	e.POST("/update/:metricType/:key/:value", func(c *echo.Context) error {
-		return handlers.UpdateMetric(c, storage)
+		return handlers.UpdateMetric(c, storage, fileStorage)
 	})
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -198,7 +199,7 @@ func TestGetMetricValue(t *testing.T) {
 			},
 		},
 	}
-	storage := mem_storage.NewMemStorage()
+	storage := int_storage.NewMemStorage()
 	storage.SetGauge(gaugeKey, gaugeValue)
 	storage.AddCounter(counterKey, counterValue)
 	e := echo.New()
@@ -235,7 +236,7 @@ func TestGetAllMetrics(t *testing.T) {
 		metricsURL = "/"
 	)
 
-	storage := mem_storage.NewMemStorage()
+	storage := int_storage.NewMemStorage()
 	storage.SetGauge(gaugeKey, gaugeValue)
 	storage.AddCounter(counterKey, counterValue)
 
@@ -346,12 +347,13 @@ func TestUpdateMetricJSON(t *testing.T) {
 		},
 	}
 
-	storage := mem_storage.NewMemStorage()
+	storage := int_storage.NewMemStorage()
+	fileStorage := int_storage.NewFileStorage("", 0)
 
 	e := echo.New()
 	e.Validator = &handlers.MetricValidator{Validator: validator.New()}
 	e.POST("update/", func(c *echo.Context) error {
-		return handlers.UpdateMetricJSON(c, storage)
+		return handlers.UpdateMetricJSON(c, storage, fileStorage)
 	})
 
 	for _, test := range tests {
@@ -475,7 +477,7 @@ func TestGetMetricValueJSON(t *testing.T) {
 		},
 	}
 
-	storage := mem_storage.NewMemStorage()
+	storage := int_storage.NewMemStorage()
 	storage.SetGauge(gaugeKey, gaugeValue)
 	storage.AddCounter(counterKey, counterValue)
 

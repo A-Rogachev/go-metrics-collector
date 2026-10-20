@@ -10,6 +10,7 @@ import (
 	"github.com/go-playground/validator/v10"
 	"github.com/labstack/echo/v5"
 
+	loggers "github.com/A-Rogachev/go-metrics-collector/internal/logger"
 	models "github.com/A-Rogachev/go-metrics-collector/internal/model"
 )
 
@@ -26,6 +27,19 @@ type Storage interface {
 	GetStringValue(metricType string, key string) (string, error)
 	GetNumberValue(metricType string, value string) (any, error)
 	Snapshot() models.MetricSnapshot
+}
+
+type FileStorage interface {
+	UpdateFromSnapshot(models.MetricSnapshot, bool) error
+}
+
+type LoggerEvent interface {
+	Msg(string)
+}
+
+type Logger interface {
+	Error() LoggerEvent
+	Info() LoggerEvent
 }
 
 type metricHandler func(key string, rawValue string, storage Storage) error
@@ -78,27 +92,34 @@ func handleGaugeMetric(key string, rawValue string, storage Storage) error {
 	return nil
 }
 
-func UpdateMetric(c *echo.Context, storage Storage) error {
+func UpdateMetric(c *echo.Context, s Storage, fs FileStorage) error {
 	metricType := c.Param("metricType")
 	key, rawValue := c.Param("key"), c.Param("value")
 	handler, ok := metricHandlers[metricType]
 	if !ok {
 		return echo.NewHTTPError(http.StatusBadRequest, InvalidMetricTypeMsg)
 	}
-	if err := handler(key, rawValue, storage); err != nil {
+	if err := handler(key, rawValue, s); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, InvalidMetricValueMsg)
+	}
+
+	err := fs.UpdateFromSnapshot(s.Snapshot(), true)
+	if err != nil {
+		if logger, ok := c.Get("logger").(loggers.Logger); ok {
+			logger.Error().Msg(err.Error())
+		}
 	}
 	return c.NoContent(http.StatusOK)
 }
 
-func GetMetricValue(c *echo.Context, storage Storage) error {
+func GetMetricValue(c *echo.Context, s Storage) error {
 	metricType := c.Param("metricType")
 	_, ok := metricHandlers[metricType]
 	if !ok {
 		return echo.NewHTTPError(http.StatusNotFound, InvalidMetricTypeMsg)
 	}
 	key := c.Param("key")
-	value, err := storage.GetStringValue(metricType, key)
+	value, err := s.GetStringValue(metricType, key)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusNotFound, "Metric key not found")
 	}
@@ -124,20 +145,19 @@ var metricsTemplate = template.Must(template.New("metrics").Funcs(template.FuncM
 </body>
 </html>`))
 
-func GetAllMetrics(c *echo.Context, storage Storage) error {
+func GetAllMetrics(c *echo.Context, s Storage) error {
 	c.Response().Header().Set("content-type", "text/html; charset=utf-8")
 	c.Response().WriteHeader(http.StatusOK)
-	return metricsTemplate.Execute(c.Response(), storage.Snapshot())
+	return metricsTemplate.Execute(c.Response(), s.Snapshot())
 }
 
-func UpdateMetricJSON(c *echo.Context, storage Storage) error {
+func UpdateMetricJSON(c *echo.Context, s Storage, fs FileStorage) error {
 	var newMetric models.Metric
 
 	if err := c.Bind(&newMetric); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, JSONParsingError)
 	}
 	if err := c.Validate(newMetric); err != nil {
-		fmt.Println(err)
 		var validationErrors validator.ValidationErrors
 		if errors.As(err, &validationErrors) {
 			errorsResponse := make([]ValidationErrorResponse, 0, len(validationErrors))
@@ -155,14 +175,20 @@ func UpdateMetricJSON(c *echo.Context, storage Storage) error {
 		}
 	}
 	handler, _ := metricJSONHandlers[newMetric.MType]
-	if err := handler(newMetric, storage); err != nil {
+	if err := handler(newMetric, s); err != nil {
 		fmt.Println(err)
 		return echo.NewHTTPError(http.StatusBadRequest, InvalidMetricValueMsg)
+	}
+	err := fs.UpdateFromSnapshot(s.Snapshot(), true)
+	if err != nil {
+		if logger, ok := c.Get("logger").(loggers.Logger); ok {
+			logger.Error().Msg(err.Error())
+		}
 	}
 	return c.NoContent(http.StatusOK)
 }
 
-func GetMetricValueJSON(c *echo.Context, storage Storage) error {
+func GetMetricValueJSON(c *echo.Context, s Storage) error {
 	var askedMetric models.GetMetricRequest
 
 	if err := c.Bind(&askedMetric); err != nil {
@@ -186,11 +212,11 @@ func GetMetricValueJSON(c *echo.Context, storage Storage) error {
 			})
 		}
 	}
-	value, err := storage.GetStringValue(askedMetric.MType, askedMetric.ID)
+	value, err := s.GetStringValue(askedMetric.MType, askedMetric.ID)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusNotFound, "Metric key not found")
 	}
-	result, err := storage.GetNumberValue(askedMetric.MType, value)
+	result, err := s.GetNumberValue(askedMetric.MType, value)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, "Metric value error")
 	}

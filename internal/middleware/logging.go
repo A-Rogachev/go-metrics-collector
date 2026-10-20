@@ -7,30 +7,23 @@ import (
 	"github.com/labstack/echo/v5"
 	"github.com/labstack/echo/v5/middleware"
 	"github.com/rs/zerolog"
+
+	loggers "github.com/A-Rogachev/go-metrics-collector/internal/logger"
 )
-
-type LoggerEvent interface {
-	Msg(string)
-}
-
-type Logger interface {
-	Error() LoggerEvent
-	Info() LoggerEvent
-}
 
 type ZerologAdapter struct {
 	Logger *zerolog.Logger
 }
 
-func (l ZerologAdapter) Error() LoggerEvent {
+func (l ZerologAdapter) Error() loggers.Event {
 	return l.Logger.Error()
 }
 
-func (l ZerologAdapter) Info() LoggerEvent {
+func (l ZerologAdapter) Info() loggers.Event {
 	return l.Logger.Info()
 }
 
-func GetLoggingMiddleware(logger Logger) echo.MiddlewareFunc {
+func GetLoggingMiddleware(logger loggers.Logger) echo.MiddlewareFunc {
 	return middleware.RequestLoggerWithConfig(middleware.RequestLoggerConfig{
 		LogURI:           true,
 		LogMethod:        true,
