@@ -2,10 +2,12 @@ package main
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/A-Rogachev/go-metrics-collector/internal/config"
 	handlers "github.com/A-Rogachev/go-metrics-collector/internal/handler"
 	"github.com/A-Rogachev/go-metrics-collector/internal/middleware"
+	services "github.com/A-Rogachev/go-metrics-collector/internal/service"
 	"github.com/A-Rogachev/go-metrics-collector/internal/storage"
 
 	"github.com/go-playground/validator/v10"
@@ -18,35 +20,32 @@ func main() {
 	logger := getLogger(cfg.LogLevel)
 	appLogger := middleware.ZerologAdapter{Logger: logger}
 
-	s := storage.NewMemStorage()
-	fs := storage.NewFileStorage(cfg.FileStoragePath, cfg.StoreInterval)
+	s, fs := storage.NewMemStorage(), storage.NewFileStorage(cfg.FileStoragePath)
+	saver := services.NewMetricSaver(s, fs, time.Duration(cfg.StoreInterval), appLogger)
+
 	if cfg.Restore {
-		snapshot, err := fs.LoadMetricsFromFile()
+		err := saver.RestoreMetrics()
 		if err != nil {
-			logger.Error().Msg("Snapshot restored with errors")
-		}
-		loadingError := s.LoadFromSnapshot(snapshot)
-		if loadingError != nil {
-			logger.Error().Msg("Can't restore metrics from file.")
+			logger.Error().Msg(fmt.Sprintf("Snapshot restored with errors: %s", err))
 		}
 	}
-	go fs.PeriodicSaveToFile(s)
+	go saver.PeriodicalSave()
 
 	e := echo.New()
 	e.Validator = &handlers.MetricValidator{Validator: validator.New()}
 
 	e.Use(middleware.GetLoggingMiddleware(appLogger))
-	e.Use(middleware.GzipRequestMiddleware)
+	e.Use(middleware.GzipRequestMiddleware(appLogger))
 	e.Use(middleware.GzipResponseMiddleware)
 
 	e.POST("update/", func(c *echo.Context) error {
-		return handlers.UpdateMetricJSON(c, s, fs, appLogger)
+		return handlers.UpdateMetricJSON(c, s, saver, appLogger)
 	})
 	e.POST("value/", func(c *echo.Context) error {
 		return handlers.GetMetricValueJSON(c, s)
 	})
 	e.POST("update/:metricType/:key/:value", func(c *echo.Context) error {
-		return handlers.UpdateMetric(c, s, fs, appLogger)
+		return handlers.UpdateMetric(c, s, saver, appLogger)
 	})
 	e.GET("value/:metricType/:key", func(c *echo.Context) error {
 		return handlers.GetMetricValue(c, s)

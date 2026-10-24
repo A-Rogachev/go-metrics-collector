@@ -60,7 +60,7 @@ func TestSendRequests(t *testing.T) {
 	}
 
 	logger := getLogger("info")
-	_ = SendRequests(client, logger, snapshot, server.URL+"/update")
+	_ = sendRequests(client, logger, snapshot, server.URL+"/update")
 
 	assert.ElementsMatch(t, []string{
 		"/update/gauge/Alloc/1.230000",
@@ -192,7 +192,7 @@ func TestSendJSONRequests(t *testing.T) {
 		`{"id":"PollCount","type":"counter","delta":2}`,
 	}
 	logger := getLogger("info")
-	_ = SendJSONRequests(client, logger, snapshot, server.URL+"/update/")
+	_ = sendJSONRequests(client, logger, snapshot, server.URL+"/update/")
 
 	assert.JSONEq(t, expected[0], received[0])
 	assert.JSONEq(t, expected[1], received[1])

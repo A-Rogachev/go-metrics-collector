@@ -9,12 +9,15 @@ import (
 	"net/http/httptest"
 	"strconv"
 	"testing"
+	"time"
 
 	"github.com/go-playground/validator/v10"
 
 	handlers "github.com/A-Rogachev/go-metrics-collector/internal/handler"
 	"github.com/A-Rogachev/go-metrics-collector/internal/middleware"
 	models "github.com/A-Rogachev/go-metrics-collector/internal/model"
+	services "github.com/A-Rogachev/go-metrics-collector/internal/service"
+
 	int_storage "github.com/A-Rogachev/go-metrics-collector/internal/storage"
 	"github.com/labstack/echo/v5"
 	"github.com/stretchr/testify/assert"
@@ -108,11 +111,12 @@ func TestUpdateMetrics(t *testing.T) {
 		},
 	}
 	storage := int_storage.NewMemStorage()
-	fileStorage := int_storage.NewFileStorage("", 0)
+	fileStorage := int_storage.NewFileStorage("")
 	appLogger := middleware.ZerologAdapter{Logger: getLogger("debug")}
+	saver := services.NewMetricSaver(storage, fileStorage, time.Duration(2), appLogger)
 	e := echo.New()
 	e.POST("/update/:metricType/:key/:value", func(c *echo.Context) error {
-		return handlers.UpdateMetric(c, storage, fileStorage, appLogger)
+		return handlers.UpdateMetric(c, storage, saver, appLogger)
 	})
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -350,12 +354,13 @@ func TestUpdateMetricJSON(t *testing.T) {
 	}
 
 	storage := int_storage.NewMemStorage()
-	fileStorage := int_storage.NewFileStorage("", 0)
+	fileStorage := int_storage.NewFileStorage("")
 	appLogger := middleware.ZerologAdapter{Logger: getLogger("debug")}
+	saver := services.NewMetricSaver(storage, fileStorage, time.Duration(2), appLogger)
 	e := echo.New()
 	e.Validator = &handlers.MetricValidator{Validator: validator.New()}
 	e.POST("update/", func(c *echo.Context) error {
-		return handlers.UpdateMetricJSON(c, storage, fileStorage, appLogger)
+		return handlers.UpdateMetricJSON(c, storage, saver, appLogger)
 	})
 
 	for _, test := range tests {

@@ -29,8 +29,8 @@ type Storage interface {
 	Snapshot() models.MetricSnapshot
 }
 
-type FileStorage interface {
-	UpdateFromSnapshot(models.MetricSnapshot, bool) error
+type MetricSaver interface {
+	SaveOnUpdate() error
 }
 
 type metricHandler func(key string, rawValue string, storage Storage) error
@@ -83,7 +83,12 @@ func handleGaugeMetric(key string, rawValue string, storage Storage) error {
 	return nil
 }
 
-func UpdateMetric(c *echo.Context, s Storage, fs FileStorage, logger loggers.Logger) error {
+func UpdateMetric(
+	c *echo.Context,
+	s Storage,
+	saver MetricSaver,
+	logger loggers.Logger,
+) error {
 	metricType := c.Param("metricType")
 	key, rawValue := c.Param("key"), c.Param("value")
 	handler, ok := metricHandlers[metricType]
@@ -93,7 +98,7 @@ func UpdateMetric(c *echo.Context, s Storage, fs FileStorage, logger loggers.Log
 	if err := handler(key, rawValue, s); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, InvalidMetricValueMsg)
 	}
-	if err := fs.UpdateFromSnapshot(s.Snapshot(), true); err != nil {
+	if err := saver.SaveOnUpdate(); err != nil {
 		logger.Error().Msg(err.Error())
 	}
 	return c.NoContent(http.StatusOK)
@@ -108,7 +113,7 @@ func GetMetricValue(c *echo.Context, s Storage) error {
 	key := c.Param("key")
 	value, err := s.GetStringValue(metricType, key)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusNotFound, "Metric key not found")
+		return echo.NewHTTPError(http.StatusNotFound, MetricNotFound)
 	}
 	return c.String(http.StatusOK, value)
 
@@ -151,12 +156,18 @@ func getErrorResponse(errors *validator.ValidationErrors) []ValidationErrorRespo
 	return errorsResponse
 }
 
-func UpdateMetricJSON(c *echo.Context, s Storage, fs FileStorage, logger loggers.Logger) error {
+func UpdateMetricJSON(
+	c *echo.Context,
+	s Storage,
+	saver MetricSaver,
+	logger loggers.Logger,
+) error {
 	var newMetric models.Metric
 
 	if err := c.Bind(&newMetric); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, JSONParsingError)
 	}
+	// тип метрики (наличие хендлера) валидируется в сериализаторе oneof=gauge counter
 	if err := c.Validate(newMetric); err != nil {
 		var validationErrors validator.ValidationErrors
 		if errors.As(err, &validationErrors) {
@@ -168,10 +179,10 @@ func UpdateMetricJSON(c *echo.Context, s Storage, fs FileStorage, logger loggers
 	}
 	handler, _ := metricJSONHandlers[newMetric.MType]
 	if err := handler(newMetric, s); err != nil {
-		fmt.Println(err)
+		logger.Error().Msg(err.Error())
 		return echo.NewHTTPError(http.StatusBadRequest, InvalidMetricValueMsg)
 	}
-	if err := fs.UpdateFromSnapshot(s.Snapshot(), true); err != nil {
+	if err := saver.SaveOnUpdate(); err != nil {
 		logger.Error().Msg(err.Error())
 	}
 	return c.NoContent(http.StatusOK)
@@ -183,6 +194,7 @@ func GetMetricValueJSON(c *echo.Context, s Storage) error {
 	if err := c.Bind(&askedMetric); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, JSONParsingError)
 	}
+	// тип метрики (наличие хендлера) валидируется в сериализаторе oneof=gauge counter
 	if err := c.Validate(askedMetric); err != nil {
 		var validationErrors validator.ValidationErrors
 		if errors.As(err, &validationErrors) {

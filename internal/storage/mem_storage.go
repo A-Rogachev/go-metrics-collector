@@ -86,10 +86,15 @@ func (s *MemStorage) Snapshot() models.MetricSnapshot {
 	}
 }
 
-func (s *MemStorage) LoadFromSnapshot(snapshot models.MetricSnapshot) error {
+func (s *MemStorage) LoadFromSnapshot(snapshot models.MetricSnapshot) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.gauges = snapshot.Gauges
-	s.counters = snapshot.Counters
-	return nil
+	s.gauges = maps.Clone(snapshot.Gauges)
+	if s.gauges == nil {
+		s.gauges = make(map[string]float64)
+	}
+	s.counters = maps.Clone(snapshot.Counters)
+	if s.counters == nil {
+		s.counters = make(map[string]int64)
+	}
 }

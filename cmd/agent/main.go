@@ -87,7 +87,7 @@ func (storage *AgentStorage) collect(polling bool, interval int) {
 	}
 }
 
-func SendRequests(client *http.Client, logger *slog.Logger, snapshot models.MetricSnapshot, baseURL string) map[string]int64 {
+func sendRequests(client *http.Client, logger *slog.Logger, snapshot models.MetricSnapshot, baseURL string) map[string]int64 {
 	sentCounters := make(map[string]int64, 0)
 	for key, value := range snapshot.Gauges {
 		url := fmt.Sprintf("%s/gauge/%s/%f", baseURL, key, value)
@@ -124,7 +124,7 @@ func sendMetric(client *http.Client, url string) error {
 	return nil
 }
 
-func SendJSONRequests(client *http.Client, logger *slog.Logger, snapshot models.MetricSnapshot, baseURL string) map[string]int64 {
+func sendJSONRequests(client *http.Client, logger *slog.Logger, snapshot models.MetricSnapshot, baseURL string) map[string]int64 {
 	sentCounters := make(map[string]int64, 0)
 	url := baseURL + "/"
 	for key, value := range snapshot.Gauges {
@@ -227,9 +227,9 @@ func main() {
 		time.Sleep(time.Second * time.Duration(cfg.ReportConfig.ReportInterval))
 
 		snapshot := tempStorage.snapshot()
-		sentCounters := SendJSONRequests(&client, logger, snapshot, "http://"+cfg.APIConfig.Address+"/update")
+		sentCounters := sendJSONRequests(&client, logger, snapshot, "http://"+cfg.APIConfig.Address+"/update")
 		// NOTE: старая реализация с отправкой метрик через параметры запроса
-		//sentCounters := SendRequests(&client, logger, snapshot, "http://"+cfg.APIConfig.Address+"/update")
+		//sentCounters := sendRequests(&client, logger, snapshot, "http://"+cfg.APIConfig.Address+"/update")
 		tempStorage.subtractCounters(sentCounters)
 	}
 }

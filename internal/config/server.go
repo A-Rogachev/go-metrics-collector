@@ -56,11 +56,7 @@ func GetServerConfig() ServerConfig {
 
 	path, exists := os.LookupEnv("FILE_STORAGE_PATH")
 	if exists {
-		file, err := os.OpenFile(path, os.O_WRONLY, 0644)
-		if err == nil {
-			defer file.Close()
-			cfg.FileStoragePath = path
-		}
+		cfg.FileStoragePath = path
 	}
 
 	return cfg

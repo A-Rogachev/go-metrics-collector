@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strings"
 
+	loggers "github.com/A-Rogachev/go-metrics-collector/internal/logger"
 	"github.com/labstack/echo/v5"
 )
 
@@ -42,7 +43,6 @@ func (c *compressWriter) WriteHeader(statusCode int) {
 		c.Header().Set("Content-Encoding", "gzip")
 		c.Header().Add("Vary", "Accept-Encoding")
 		c.Header().Del("Content-Length")
-		// fmt.Println("compressed")
 		c.zw = gzip.NewWriter(c.w)
 	}
 	c.w.WriteHeader(statusCode)
@@ -84,6 +84,16 @@ func (c *compressReader) Close() error {
 	return c.zr.Close()
 }
 
+func isCompressible(contentType string) bool {
+	mediaType, _, err := mime.ParseMediaType(contentType)
+	if err != nil {
+		return false
+	}
+	return mediaType == "application/json" ||
+		mediaType == "text/plain" ||
+		mediaType == "text/html"
+}
+
 func newCompressReader(r io.ReadCloser) (*compressReader, error) {
 	zr, err := gzip.NewReader(r)
 	if err != nil {
@@ -95,31 +105,23 @@ func newCompressReader(r io.ReadCloser) (*compressReader, error) {
 	}, nil
 }
 
-func isCompressible(contentType string) bool {
-	mediaType, _, err := mime.ParseMediaType(contentType)
-	if err != nil {
-		return false
-	}
-	return mediaType == "application/json" ||
-		mediaType == "text/plain" ||
-		mediaType == "text/html"
-}
-
-func GzipRequestMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
-	return func(c *echo.Context) error {
-		request := c.Request()
-		if !strings.Contains(request.Header.Get("Content-Encoding"), "gzip") {
+func GzipRequestMiddleware(logger loggers.Logger) echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c *echo.Context) error {
+			request := c.Request()
+			if !strings.Contains(request.Header.Get("Content-Encoding"), "gzip") {
+				return next(c)
+			}
+			compReader, err := newCompressReader(request.Body)
+			if err != nil {
+				logger.Error().Msg(fmt.Sprintf("%s", err))
+				return echo.NewHTTPError(http.StatusBadRequest, "invalid gzip request body")
+			}
+			request.Body = compReader
+			request.Header.Del("Content-Encoding")
+			defer request.Body.Close()
 			return next(c)
 		}
-		gzipReader, err := gzip.NewReader(request.Body)
-		if err != nil {
-			fmt.Println(err)
-			return echo.NewHTTPError(http.StatusBadRequest, "invalid gzip request body")
-		}
-		request.Body = &compressReader{r: request.Body, zr: gzipReader}
-		request.Header.Del("Content-Encoding")
-		defer request.Body.Close()
-		return next(c)
 	}
 }
 
