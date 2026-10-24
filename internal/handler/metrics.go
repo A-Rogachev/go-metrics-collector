@@ -7,10 +7,10 @@ import (
 	"net/http"
 	"strconv"
 
+	loggers "github.com/A-Rogachev/go-metrics-collector/internal/logger"
 	"github.com/go-playground/validator/v10"
 	"github.com/labstack/echo/v5"
 
-	loggers "github.com/A-Rogachev/go-metrics-collector/internal/logger"
 	models "github.com/A-Rogachev/go-metrics-collector/internal/model"
 )
 
@@ -31,15 +31,6 @@ type Storage interface {
 
 type FileStorage interface {
 	UpdateFromSnapshot(models.MetricSnapshot, bool) error
-}
-
-type LoggerEvent interface {
-	Msg(string)
-}
-
-type Logger interface {
-	Error() LoggerEvent
-	Info() LoggerEvent
 }
 
 type metricHandler func(key string, rawValue string, storage Storage) error
@@ -92,7 +83,7 @@ func handleGaugeMetric(key string, rawValue string, storage Storage) error {
 	return nil
 }
 
-func UpdateMetric(c *echo.Context, s Storage, fs FileStorage) error {
+func UpdateMetric(c *echo.Context, s Storage, fs FileStorage, logger loggers.Logger) error {
 	metricType := c.Param("metricType")
 	key, rawValue := c.Param("key"), c.Param("value")
 	handler, ok := metricHandlers[metricType]
@@ -102,12 +93,8 @@ func UpdateMetric(c *echo.Context, s Storage, fs FileStorage) error {
 	if err := handler(key, rawValue, s); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, InvalidMetricValueMsg)
 	}
-
-	err := fs.UpdateFromSnapshot(s.Snapshot(), true)
-	if err != nil {
-		if logger, ok := c.Get("logger").(loggers.Logger); ok {
-			logger.Error().Msg(err.Error())
-		}
+	if err := fs.UpdateFromSnapshot(s.Snapshot(), true); err != nil {
+		logger.Error().Msg(err.Error())
 	}
 	return c.NoContent(http.StatusOK)
 }
@@ -151,7 +138,20 @@ func GetAllMetrics(c *echo.Context, s Storage) error {
 	return metricsTemplate.Execute(c.Response(), s.Snapshot())
 }
 
-func UpdateMetricJSON(c *echo.Context, s Storage, fs FileStorage) error {
+func getErrorResponse(errors *validator.ValidationErrors) []ValidationErrorResponse {
+	errorsResponse := make([]ValidationErrorResponse, 0, len(*errors))
+	for _, validationError := range *errors {
+		errorsResponse = append(errorsResponse, ValidationErrorResponse{
+			Field:   validationError.Field(),
+			Tag:     validationError.Tag(),
+			Value:   validationError.Value(),
+			Message: validationError.Error(),
+		})
+	}
+	return errorsResponse
+}
+
+func UpdateMetricJSON(c *echo.Context, s Storage, fs FileStorage, logger loggers.Logger) error {
 	var newMetric models.Metric
 
 	if err := c.Bind(&newMetric); err != nil {
@@ -160,30 +160,19 @@ func UpdateMetricJSON(c *echo.Context, s Storage, fs FileStorage) error {
 	if err := c.Validate(newMetric); err != nil {
 		var validationErrors validator.ValidationErrors
 		if errors.As(err, &validationErrors) {
-			errorsResponse := make([]ValidationErrorResponse, 0, len(validationErrors))
-			for _, validationError := range validationErrors {
-				errorsResponse = append(errorsResponse, ValidationErrorResponse{
-					Field:   validationError.Field(),
-					Tag:     validationError.Tag(),
-					Value:   validationError.Value(),
-					Message: validationError.Error(),
-				})
-			}
 			return c.JSON(http.StatusBadRequest, map[string]any{
-				"errors": errorsResponse,
+				"errors": getErrorResponse(&validationErrors),
 			})
 		}
+		return echo.NewHTTPError(http.StatusBadRequest, "validation error")
 	}
 	handler, _ := metricJSONHandlers[newMetric.MType]
 	if err := handler(newMetric, s); err != nil {
 		fmt.Println(err)
 		return echo.NewHTTPError(http.StatusBadRequest, InvalidMetricValueMsg)
 	}
-	err := fs.UpdateFromSnapshot(s.Snapshot(), true)
-	if err != nil {
-		if logger, ok := c.Get("logger").(loggers.Logger); ok {
-			logger.Error().Msg(err.Error())
-		}
+	if err := fs.UpdateFromSnapshot(s.Snapshot(), true); err != nil {
+		logger.Error().Msg(err.Error())
 	}
 	return c.NoContent(http.StatusOK)
 }
@@ -194,24 +183,16 @@ func GetMetricValueJSON(c *echo.Context, s Storage) error {
 	if err := c.Bind(&askedMetric); err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, JSONParsingError)
 	}
-	// TODO: вынести обработку ошибок в отдельный хелпер
 	if err := c.Validate(askedMetric); err != nil {
 		var validationErrors validator.ValidationErrors
 		if errors.As(err, &validationErrors) {
-			errorsResponse := make([]ValidationErrorResponse, 0, len(validationErrors))
-			for _, validationError := range validationErrors {
-				errorsResponse = append(errorsResponse, ValidationErrorResponse{
-					Field:   validationError.Field(),
-					Tag:     validationError.Tag(),
-					Value:   validationError.Value(),
-					Message: validationError.Error(),
-				})
-			}
 			return c.JSON(http.StatusBadRequest, map[string]any{
-				"errors": errorsResponse,
+				"errors": getErrorResponse(&validationErrors),
 			})
 		}
+		return echo.NewHTTPError(http.StatusBadRequest, "validation error")
 	}
+
 	value, err := s.GetStringValue(askedMetric.MType, askedMetric.ID)
 	if err != nil {
 		return echo.NewHTTPError(http.StatusNotFound, "Metric key not found")

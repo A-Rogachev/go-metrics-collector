@@ -13,6 +13,7 @@ import (
 	"github.com/go-playground/validator/v10"
 
 	handlers "github.com/A-Rogachev/go-metrics-collector/internal/handler"
+	"github.com/A-Rogachev/go-metrics-collector/internal/middleware"
 	models "github.com/A-Rogachev/go-metrics-collector/internal/model"
 	int_storage "github.com/A-Rogachev/go-metrics-collector/internal/storage"
 	"github.com/labstack/echo/v5"
@@ -108,9 +109,10 @@ func TestUpdateMetrics(t *testing.T) {
 	}
 	storage := int_storage.NewMemStorage()
 	fileStorage := int_storage.NewFileStorage("", 0)
+	appLogger := middleware.ZerologAdapter{Logger: getLogger("debug")}
 	e := echo.New()
 	e.POST("/update/:metricType/:key/:value", func(c *echo.Context) error {
-		return handlers.UpdateMetric(c, storage, fileStorage)
+		return handlers.UpdateMetric(c, storage, fileStorage, appLogger)
 	})
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -349,11 +351,11 @@ func TestUpdateMetricJSON(t *testing.T) {
 
 	storage := int_storage.NewMemStorage()
 	fileStorage := int_storage.NewFileStorage("", 0)
-
+	appLogger := middleware.ZerologAdapter{Logger: getLogger("debug")}
 	e := echo.New()
 	e.Validator = &handlers.MetricValidator{Validator: validator.New()}
 	e.POST("update/", func(c *echo.Context) error {
-		return handlers.UpdateMetricJSON(c, storage, fileStorage)
+		return handlers.UpdateMetricJSON(c, storage, fileStorage, appLogger)
 	})
 
 	for _, test := range tests {

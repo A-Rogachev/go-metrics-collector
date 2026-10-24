@@ -35,25 +35,18 @@ func main() {
 	e := echo.New()
 	e.Validator = &handlers.MetricValidator{Validator: validator.New()}
 
-	// добавление логгера в контекст для использования в хендлерах
-	e.Use(func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c *echo.Context) error {
-			c.Set("logger", appLogger)
-			return next(c)
-		}
-	})
 	e.Use(middleware.GetLoggingMiddleware(appLogger))
 	e.Use(middleware.GzipRequestMiddleware)
 	e.Use(middleware.GzipResponseMiddleware)
 
 	e.POST("update/", func(c *echo.Context) error {
-		return handlers.UpdateMetricJSON(c, s, fs)
+		return handlers.UpdateMetricJSON(c, s, fs, appLogger)
 	})
 	e.POST("value/", func(c *echo.Context) error {
 		return handlers.GetMetricValueJSON(c, s)
 	})
 	e.POST("update/:metricType/:key/:value", func(c *echo.Context) error {
-		return handlers.UpdateMetric(c, s, fs)
+		return handlers.UpdateMetric(c, s, fs, appLogger)
 	})
 	e.GET("value/:metricType/:key", func(c *echo.Context) error {
 		return handlers.GetMetricValue(c, s)
