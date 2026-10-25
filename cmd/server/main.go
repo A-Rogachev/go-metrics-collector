@@ -21,7 +21,12 @@ func main() {
 	appLogger := middleware.ZerologAdapter{Logger: logger}
 
 	s, fs := storage.NewMemStorage(), storage.NewFileStorage(cfg.FileStoragePath)
-	saver := services.NewMetricSaver(s, fs, time.Duration(cfg.StoreInterval), appLogger)
+	saver := services.NewMetricSaver(
+		s,
+		fs,
+		time.Duration(cfg.StoreInterval)*time.Second,
+		appLogger,
+	)
 
 	if cfg.Restore {
 		err := saver.RestoreMetrics()
