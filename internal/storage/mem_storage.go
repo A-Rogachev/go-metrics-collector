@@ -58,11 +58,43 @@ func (s *MemStorage) GetStringValue(metricType string, key string) (string, erro
 	}
 }
 
+func (s *MemStorage) GetNumberValue(metricType string, value string) (any, error) {
+	var result any
+	var err error
+
+	switch metricType {
+	case models.Gauge:
+		result, err = strconv.ParseFloat(value, 64)
+		if err != nil {
+			return float64(0.0), fmt.Errorf("error while converting metric")
+		}
+	case models.Counter:
+		result, err = strconv.ParseInt(value, 10, 64)
+		if err != nil {
+			return int64(0), fmt.Errorf("error while converting metric")
+		}
+	}
+	return result, nil
+}
+
 func (s *MemStorage) Snapshot() models.MetricSnapshot {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return models.MetricSnapshot{
 		Gauges:   maps.Clone(s.gauges),
 		Counters: maps.Clone(s.counters),
+	}
+}
+
+func (s *MemStorage) LoadFromSnapshot(snapshot models.MetricSnapshot) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.gauges = maps.Clone(snapshot.Gauges)
+	if s.gauges == nil {
+		s.gauges = make(map[string]float64)
+	}
+	s.counters = maps.Clone(snapshot.Counters)
+	if s.counters == nil {
+		s.counters = make(map[string]int64)
 	}
 }
