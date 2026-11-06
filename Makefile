@@ -75,11 +75,28 @@ test9:  ## Запуск тестов для итерации 9
 	-server-port=$$SERVER_PORT \
 	-source-path=.
 
+test10:  ## Запуск тестов для итерации 10
+	SERVER_PORT=8080; \
+	ADDRESS="localhost:$${SERVER_PORT}"; \
+	TEMP_FILE=$$(mktemp); \
+	metricstest -test.v -test.run=^TestIteration10[AB]$$ \
+	-agent-binary-path=cmd/agent/agent \
+	-binary-path=cmd/server/server \
+    -database-dsn='postgres://postgres:password@127.0.0.1:5432/metrics?sslmode=disable' \
+	-server-port=$$SERVER_PORT \
+	-source-path=.
+
 server:  ## Запуск сервера
 	go run ./cmd/server/ -i=5 -r=false
 
 agent:
 	go run ./cmd/agent/ -log-level=info
+
+start:
+	sudo docker compose up -d
+
+stop:
+	sudo docker compose down -v
 
 localtest:  ## Запуск юнит и интеграционных тестов
 	@echo "\n| ===============> Running agent tests <=============== |\n"

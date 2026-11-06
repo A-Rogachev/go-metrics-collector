@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"html/template"
@@ -224,4 +225,15 @@ func GetMetricValueJSON(c *echo.Context, s Storage) error {
 		response.Delta = &value
 	}
 	return c.JSON(http.StatusOK, response)
+}
+
+type DBHealthChecker interface {
+	Ping(context.Context) error
+}
+
+func PingDatabase(c *echo.Context, db DBHealthChecker) error {
+	if err := db.Ping(c.Request().Context()); err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "database unavailable")
+	}
+	return c.NoContent(http.StatusOK)
 }

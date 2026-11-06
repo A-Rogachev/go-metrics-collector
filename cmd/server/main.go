@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/A-Rogachev/go-metrics-collector/internal/config"
@@ -16,7 +17,13 @@ import (
 
 func main() {
 
-	cfg := config.GetServerConfig()
+	cfg, cfgDB := config.GetServerConfig(), config.GetDatabaseConfig()
+
+	db, err := storage.NewDBStorage(cfgDB.DriverName, cfgDB.DSN)
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	logger := getLogger(cfg.LogLevel)
 	appLogger := middleware.ZerologAdapter{Logger: logger}
 
@@ -57,6 +64,9 @@ func main() {
 	})
 	e.GET("/", func(c *echo.Context) error {
 		return handlers.GetAllMetrics(c, s)
+	})
+	e.GET("/ping", func(c *echo.Context) error {
+		return handlers.PingDatabase(c, db)
 	})
 
 	if err := e.Start(cfg.ServerAddress); err != nil {
