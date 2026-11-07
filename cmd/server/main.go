@@ -19,10 +19,11 @@ func main() {
 
 	cfg, cfgDB := config.GetServerConfig(), config.GetDatabaseConfig()
 
-	db, err := storage.NewDBStorage(cfgDB.DriverName, cfgDB.DSN)
+	dbStorage, err := storage.NewDBStorage(cfgDB.DriverName, cfgDB.DSN)
 	if err != nil {
 		log.Fatal(err)
 	}
+	// if err := migrations.Run(dbStorage)
 
 	logger := getLogger(cfg.LogLevel)
 	appLogger := middleware.ZerologAdapter{Logger: logger}
@@ -66,7 +67,7 @@ func main() {
 		return handlers.GetAllMetrics(c, s)
 	})
 	e.GET("/ping", func(c *echo.Context) error {
-		return handlers.PingDatabase(c, db)
+		return handlers.PingDatabase(c, dbStorage)
 	})
 
 	if err := e.Start(cfg.ServerAddress); err != nil {
