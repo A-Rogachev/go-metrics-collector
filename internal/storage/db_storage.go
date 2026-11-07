@@ -29,3 +29,7 @@ func (s DBStorage) Ping(ctx context.Context) error {
 	}
 	return nil
 }
+
+func (s DBStorage) GetPool() *sql.DB {
+	return s.db
+}
