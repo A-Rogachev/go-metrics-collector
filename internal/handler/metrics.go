@@ -31,10 +31,10 @@ type Storage interface {
 }
 
 type MetricSaver interface {
-	SaveOnUpdate() error
+	SaveOnUpdate(ctx context.Context, metric models.Metric) error
 }
 
-type metricHandler func(key string, rawValue string, storage Storage) error
+type metricHandler func(key string, rawValue string, storage Storage) (models.Metric, error)
 
 type metricJSONHandler func(metric models.Metric, storage Storage) error
 
@@ -66,22 +66,32 @@ func handleCounterJSONMetric(metric models.Metric, storage Storage) error {
 	return nil
 }
 
-func handleCounterMetric(key string, rawValue string, storage Storage) error {
-	value, err := strconv.ParseInt(rawValue, 10, 64)
+func handleCounterMetric(key string, rawValue string, storage Storage) (models.Metric, error) {
+	delta, err := strconv.ParseInt(rawValue, 10, 64)
 	if err != nil {
-		return err
+		return models.Metric{}, err
 	}
-	storage.AddCounter(key, value)
-	return nil
+	metric := models.Metric{
+		ID:    key,
+		MType: models.Gauge,
+		Delta: &delta,
+	}
+	storage.AddCounter(key, delta)
+	return metric, nil
 }
 
-func handleGaugeMetric(key string, rawValue string, storage Storage) error {
+func handleGaugeMetric(key string, rawValue string, storage Storage) (models.Metric, error) {
 	value, err := strconv.ParseFloat(rawValue, 64)
 	if err != nil {
-		return err
+		return models.Metric{}, err
+	}
+	metric := models.Metric{
+		ID:    key,
+		MType: models.Gauge,
+		Value: &value,
 	}
 	storage.SetGauge(key, value)
-	return nil
+	return metric, nil
 }
 
 func UpdateMetric(
@@ -96,10 +106,11 @@ func UpdateMetric(
 	if !ok {
 		return echo.NewHTTPError(http.StatusBadRequest, InvalidMetricTypeMsg)
 	}
-	if err := handler(key, rawValue, s); err != nil {
+	metric, err := handler(key, rawValue, s)
+	if err != nil {
 		return echo.NewHTTPError(http.StatusBadRequest, InvalidMetricValueMsg)
 	}
-	if err := saver.SaveOnUpdate(); err != nil {
+	if err := saver.SaveOnUpdate(c.Request().Context(), metric); err != nil {
 		logger.Error().Msg(err.Error())
 	}
 	return c.NoContent(http.StatusOK)
@@ -183,7 +194,7 @@ func UpdateMetricJSON(
 		logger.Error().Msg(err.Error())
 		return echo.NewHTTPError(http.StatusBadRequest, InvalidMetricValueMsg)
 	}
-	if err := saver.SaveOnUpdate(); err != nil {
+	if err := saver.SaveOnUpdate(c.Request().Context(), newMetric); err != nil {
 		logger.Error().Msg(err.Error())
 	}
 	return c.NoContent(http.StatusOK)

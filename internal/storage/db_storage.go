@@ -3,10 +3,18 @@ package storage
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"time"
 
+	models "github.com/A-Rogachev/go-metrics-collector/internal/model"
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
+
+type UnavailableDBHealthChecker struct{}
+
+func (UnavailableDBHealthChecker) Ping(context.Context) error {
+	return errors.New("database is not configured")
+}
 
 type DBStorage struct {
 	db *sql.DB
@@ -32,4 +40,8 @@ func (s DBStorage) Ping(ctx context.Context) error {
 
 func (s DBStorage) GetPool() *sql.DB {
 	return s.db
+}
+
+func (s DBStorage) SaveOnUpdate(cts context.Context, metric models.Metric) error {
+	return nil
 }

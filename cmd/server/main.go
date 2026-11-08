@@ -7,6 +7,7 @@ import (
 	"github.com/A-Rogachev/go-metrics-collector/internal/config"
 	handlers "github.com/A-Rogachev/go-metrics-collector/internal/handler"
 	"github.com/A-Rogachev/go-metrics-collector/internal/middleware"
+	repositories "github.com/A-Rogachev/go-metrics-collector/internal/repository"
 	services "github.com/A-Rogachev/go-metrics-collector/internal/service"
 	"github.com/A-Rogachev/go-metrics-collector/internal/storage"
 	"github.com/A-Rogachev/go-metrics-collector/migrations"
@@ -18,62 +19,73 @@ import (
 func main() {
 
 	cfg, cfgDB := config.GetServerConfig(), config.GetDatabaseConfig()
+	log := middleware.ZerologAdapter{Logger: getLogger(cfg.LogLevel)}
 
-	logger := getLogger(cfg.LogLevel)
-	appLogger := middleware.ZerologAdapter{Logger: logger}
+	memoryStorage := storage.NewMemStorage()
 
-	dbStorage, err := storage.NewDBStorage(cfgDB.DriverName, cfgDB.DSN)
-	if err != nil {
-		logger.Fatal().Msg(fmt.Sprintf("database error: %s", err))
-	}
-	if err := migrations.Run(dbStorage.GetPool()); err != nil {
-		logger.Fatal().Msg(fmt.Sprintf("database migrations error: %s", err))
-	}
+	var saver handlers.MetricSaver
+	var dbHealthChecker handlers.DBHealthChecker = storage.UnavailableDBHealthChecker{}
 
-	ms, fs := storage.NewMemStorage(), storage.NewFileStorage(cfg.FileStoragePath)
-	saver := services.NewMetricSaver(
-		ms,
-		fs,
-		time.Duration(cfg.StoreInterval)*time.Second,
-		appLogger,
-	)
-
-	if cfg.Restore {
-		err := saver.RestoreMetrics()
+	switch {
+	case cfgDB.DSN != "":
+		dbStorage, err := storage.NewDBStorage(cfgDB.DriverName, cfgDB.DSN)
 		if err != nil {
-			logger.Error().Msg(fmt.Sprintf("Snapshot restored with errors: %s", err))
+			log.Logger.Fatal().Msg(fmt.Sprintf("database error: %s", err))
 		}
+		if err := migrations.Run(dbStorage.GetPool()); err != nil {
+			log.Logger.Fatal().Msg(fmt.Sprintf("database migrations error: %s", err))
+		}
+		repository := repositories.NewPostgresMetricsRepository(dbStorage.GetPool())
+		saver = services.NewMetricDBSaver(repository)
+		dbHealthChecker = dbStorage
+	case cfg.FileStoragePath != "":
+		fileStorage := storage.NewFileStorage(cfg.FileStoragePath)
+		fileSaver := services.NewMetricSaver(
+			memoryStorage,
+			fileStorage,
+			time.Duration(cfg.StoreInterval)*time.Second,
+			log,
+		)
+		saver = fileSaver
+		if cfg.Restore {
+			err := fileSaver.RestoreMetrics()
+			if err != nil {
+				log.Logger.Error().Msg(fmt.Sprintf("Snapshot restored with errors: %s", err))
+			}
+		}
+		go fileSaver.PeriodicalSave()
+	default:
+		saver = services.NewNoopMetricSaver()
 	}
-	go saver.PeriodicalSave()
 
 	e := echo.New()
 	e.Validator = &handlers.MetricValidator{Validator: validator.New()}
 
-	e.Use(middleware.GetLoggingMiddleware(appLogger))
-	e.Use(middleware.GzipRequestMiddleware(appLogger))
+	e.Use(middleware.GetLoggingMiddleware(log))
+	e.Use(middleware.GzipRequestMiddleware(log))
 	e.Use(middleware.GzipResponseMiddleware)
 
 	e.POST("update/", func(c *echo.Context) error {
-		return handlers.UpdateMetricJSON(c, ms, saver, appLogger)
+		return handlers.UpdateMetricJSON(c, memoryStorage, saver, log)
 	})
 	e.POST("value/", func(c *echo.Context) error {
-		return handlers.GetMetricValueJSON(c, ms)
+		return handlers.GetMetricValueJSON(c, memoryStorage)
 	})
 	e.POST("update/:metricType/:key/:value", func(c *echo.Context) error {
-		return handlers.UpdateMetric(c, ms, saver, appLogger)
+		return handlers.UpdateMetric(c, memoryStorage, saver, log)
 	})
 	e.GET("value/:metricType/:key", func(c *echo.Context) error {
-		return handlers.GetMetricValue(c, ms)
+		return handlers.GetMetricValue(c, memoryStorage)
 	})
 	e.GET("/", func(c *echo.Context) error {
-		return handlers.GetAllMetrics(c, ms)
+		return handlers.GetAllMetrics(c, memoryStorage)
 	})
 	e.GET("/ping", func(c *echo.Context) error {
-		return handlers.PingDatabase(c, dbStorage)
+		return handlers.PingDatabase(c, dbHealthChecker)
 	})
 
 	if err := e.Start(cfg.ServerAddress); err != nil {
-		logger.Fatal().Msg(fmt.Sprintf("failed to start server: %s", err))
+		log.Logger.Fatal().Msg(fmt.Sprintf("failed to start server: %s", err))
 	}
 
 }
