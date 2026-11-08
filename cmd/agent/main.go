@@ -153,28 +153,6 @@ func sendJSONRequests(client *http.Client, logger *slog.Logger, snapshot models.
 	return sentCounters
 }
 
-// TODO: remove if not used (doesnt use gzip)
-// func sendJSONMetric(client *http.Client, url string, body models.Metric) error {
-// 	reqBody, err := json.Marshal(body)
-// 	if err != nil {
-// 		return err
-// 	}
-// 	response, err := client.Post(url, "application/json", bytes.NewBuffer(reqBody))
-// 	if err != nil {
-// 		return err
-// 	}
-// 	defer response.Body.Close()
-
-// 	if response.StatusCode != http.StatusOK {
-// 		return fmt.Errorf("unexpected status: %d", response.StatusCode)
-// 	}
-// 	_, err = io.Copy(io.Discard, response.Body)
-// 	if err != nil {
-// 		return err
-// 	}
-// 	return nil
-// }
-
 func sendJSONMetric(client *http.Client, url string, body models.Metric) error {
 	jsonBody, err := json.Marshal(body)
 	if err != nil {
