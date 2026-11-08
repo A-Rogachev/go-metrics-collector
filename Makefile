@@ -97,6 +97,17 @@ test11:  ## Запуск тестов для итерации 11
 	-server-port=$$SERVER_PORT \
 	-source-path=.
 
+test12:  ## Запуск тестов для итерации 2
+	SERVER_PORT=8080; \
+	ADDRESS="localhost:$${SERVER_PORT}"; \
+	TEMP_FILE=$$(mktemp); \
+	metricstest -test.v -test.run=^TestIteration12$$ \
+	-agent-binary-path=cmd/agent/agent \
+	-binary-path=cmd/server/server \
+    -database-dsn='postgres://postgres:password@127.0.0.1:5432/metrics?sslmode=disable' \
+	-server-port=$$SERVER_PORT \
+	-source-path=.
+
 server:  ## Запуск сервера
 	go run ./cmd/server/ -i=5 -r=false
 
