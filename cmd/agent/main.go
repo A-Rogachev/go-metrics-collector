@@ -18,6 +18,8 @@ import (
 	models "github.com/A-Rogachev/go-metrics-collector/internal/model"
 )
 
+const BatchSize = 50
+
 type AgentStorage struct {
 	mutex    sync.Mutex
 	gauges   map[string]float64
@@ -124,7 +126,109 @@ func sendMetric(client *http.Client, url string) error {
 	return nil
 }
 
-func sendJSONRequests(client *http.Client, logger *slog.Logger, snapshot models.MetricSnapshot, baseURL string) map[string]int64 {
+func sendJSONBatchRequests(
+	client *http.Client,
+	logger *slog.Logger,
+	snapshot models.MetricSnapshot,
+	baseURL string,
+) map[string]int64 {
+	sentCounters := make(map[string]int64, 0)
+	var metricsToSend []models.Metric
+	for key, value := range snapshot.Gauges {
+		metricsToSend = append(
+			metricsToSend,
+			models.Metric{
+				ID:    key,
+				MType: models.Gauge,
+				Value: &value,
+			},
+		)
+	}
+	for key, value := range snapshot.Counters {
+		metricsToSend = append(
+			metricsToSend,
+			models.Metric{
+				ID:    key,
+				MType: models.Counter,
+				Delta: &value,
+			},
+		)
+		sentCounters[key] = value
+	}
+	if len(metricsToSend) > 0 {
+		err := sendJSONMetricBatches(client, baseURL+"/", metricsToSend)
+		if err != nil {
+			logger.Debug(err.Error())
+			return make(map[string]int64, 0)
+		} else {
+			logger.Info("Metrics sent to the server")
+			return sentCounters
+		}
+	}
+	logger.Info("No metrics to send")
+	return sentCounters
+}
+
+func sendJSONMetricBatches(client *http.Client, url string, metrics []models.Metric) error {
+	for start := 0; start < len(metrics); start += BatchSize {
+		end := start + BatchSize
+		if end > len(metrics) {
+			end = len(metrics)
+		}
+		if err := sendJSONMetricBatch(
+			client,
+			url,
+			metrics[start:end],
+		); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func sendJSONMetricBatch(client *http.Client, url string, metrics []models.Metric) error {
+	jsonBody, err := json.Marshal(metrics)
+	if err != nil {
+		return err
+	}
+
+	var compressedBody bytes.Buffer
+	gzipWriter := gzip.NewWriter(&compressedBody)
+	if _, err := gzipWriter.Write(jsonBody); err != nil {
+		return err
+	}
+	if err := gzipWriter.Close(); err != nil {
+		return err
+	}
+
+	request, err := http.NewRequest(http.MethodPost, url, &compressedBody)
+	if err != nil {
+		return err
+	}
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Content-Encoding", "gzip")
+	response, err := client.Do(request)
+	if err != nil {
+		return err
+	}
+	defer response.Body.Close()
+
+	if response.StatusCode != http.StatusOK {
+		return fmt.Errorf("unexpected status: %d", response.StatusCode)
+	}
+	_, err = io.Copy(io.Discard, response.Body)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func sendJSONRequests(
+	client *http.Client,
+	logger *slog.Logger,
+	snapshot models.MetricSnapshot,
+	baseURL string,
+) map[string]int64 {
 	sentCounters := make(map[string]int64, 0)
 	url := baseURL + "/"
 	for key, value := range snapshot.Gauges {
@@ -205,7 +309,10 @@ func main() {
 		time.Sleep(time.Second * time.Duration(cfg.ReportConfig.ReportInterval))
 
 		snapshot := tempStorage.snapshot()
-		sentCounters := sendJSONRequests(&client, logger, snapshot, "http://"+cfg.APIConfig.Address+"/update")
+
+		sentCounters := sendJSONBatchRequests(&client, logger, snapshot, "http://"+cfg.APIConfig.Address+"/updates")
+		// NOTE: старая реализация с отправкой метрик по одному в json
+		// sentCounters := sendJSONRequests(&client, logger, snapshot, "http://"+cfg.APIConfig.Address+"/update")
 		// NOTE: старая реализация с отправкой метрик через параметры запроса
 		//sentCounters := sendRequests(&client, logger, snapshot, "http://"+cfg.APIConfig.Address+"/update")
 		tempStorage.subtractCounters(sentCounters)
