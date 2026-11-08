@@ -32,6 +32,7 @@ type Storage interface {
 
 type MetricSaver interface {
 	SaveOnUpdate(ctx context.Context, metric models.Metric) error
+	SaveBatchOnUpdate(ctx context.Context, metrics []models.Metric) error
 }
 
 type metricHandler func(key string, rawValue string, storage Storage) (models.Metric, error)
@@ -245,6 +246,48 @@ type DBHealthChecker interface {
 func PingDatabase(c *echo.Context, db DBHealthChecker) error {
 	if err := db.Ping(c.Request().Context()); err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "database unavailable")
+	}
+	return c.NoContent(http.StatusOK)
+}
+
+func BatchMetricUpdate(
+	c *echo.Context,
+	s Storage,
+	saver MetricSaver,
+	logger loggers.Logger,
+) error {
+	var newMetrics []models.Metric
+	if err := c.Bind(&newMetrics); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, JSONParsingError)
+	}
+	var completeErrors []ValidationErrorResponse
+	for _, m := range newMetrics {
+		if err := c.Validate(m); err != nil {
+			var validationErrors validator.ValidationErrors
+			if errors.As(err, &validationErrors) {
+				completeErrors = append(
+					completeErrors,
+					getErrorResponse(&validationErrors)...,
+				)
+			} else {
+				return echo.NewHTTPError(http.StatusBadRequest, "validation error")
+			}
+		}
+	}
+	if len(completeErrors) > 0 {
+		return c.JSON(http.StatusBadRequest, map[string]any{
+			"errors": completeErrors,
+		})
+	}
+	for _, m := range newMetrics {
+		handler, _ := metricJSONHandlers[m.MType]
+		if err := handler(m, s); err != nil {
+			logger.Error().Msg(err.Error())
+			return echo.NewHTTPError(http.StatusBadRequest, InvalidMetricValueMsg)
+		}
+	}
+	if err := saver.SaveBatchOnUpdate(c.Request().Context(), newMetrics); err != nil {
+		logger.Error().Msg(err.Error())
 	}
 	return c.NoContent(http.StatusOK)
 }

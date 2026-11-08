@@ -7,14 +7,12 @@ import (
 )
 
 type MetricRepository interface {
-	UpsertMetric(
-		ctx context.Context,
-		metric models.Metric,
-	) error
+	UpsertMetric(ctx context.Context, metric models.Metric) error
 }
 
 type DBRepository interface {
 	UpsertMetric(ctx context.Context, metric models.Metric) error
+	UpsertMetricBatch(ctx context.Context, metric []models.Metric) error
 }
 
 type MetricDBSaver struct {
@@ -32,4 +30,11 @@ func (s *MetricDBSaver) SaveOnUpdate(
 	metric models.Metric,
 ) error {
 	return s.repository.UpsertMetric(ctx, metric)
+}
+
+func (s *MetricDBSaver) SaveBatchOnUpdate(
+	ctx context.Context,
+	metrics []models.Metric,
+) error {
+	return s.repository.UpsertMetricBatch(ctx, metrics)
 }

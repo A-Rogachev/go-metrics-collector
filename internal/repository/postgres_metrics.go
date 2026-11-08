@@ -47,3 +47,28 @@ func (r *PostgresMetricsRepository) UpsertMetric(
 	}
 	return nil
 }
+
+func (r *PostgresMetricsRepository) UpsertMetricBatch(
+	ctx context.Context,
+	metrics []models.Metric,
+) error {
+	tx, err := r.db.Begin()
+	if err != nil {
+		return err
+	}
+	for _, m := range metrics {
+		_, err := r.db.ExecContext(
+			ctx,
+			upsertMetricQuery,
+			m.ID,
+			m.MType,
+			m.Delta,
+			m.Value,
+		)
+		if err != nil {
+			tx.Rollback()
+			return err
+		}
+	}
+	return tx.Commit()
+}

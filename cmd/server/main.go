@@ -68,6 +68,9 @@ func main() {
 	e.POST("update/", func(c *echo.Context) error {
 		return handlers.UpdateMetricJSON(c, memoryStorage, saver, log)
 	})
+	e.POST("updates/", func(c *echo.Context) error {
+		return handlers.BatchMetricUpdate(c, memoryStorage, saver, log)
+	})
 	e.POST("value/", func(c *echo.Context) error {
 		return handlers.GetMetricValueJSON(c, memoryStorage)
 	})

@@ -15,3 +15,10 @@ func NewNoopMetricSaver() *NoopMetricSaver {
 func (s *NoopMetricSaver) SaveOnUpdate(context.Context, models.Metric) error {
 	return nil
 }
+
+func (s *NoopMetricSaver) SaveBatchOnUpdate(
+	ctx context.Context,
+	metrics []models.Metric,
+) error {
+	return nil
+}
