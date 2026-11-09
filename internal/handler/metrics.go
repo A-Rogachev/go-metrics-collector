@@ -243,8 +243,8 @@ type DBHealthChecker interface {
 	Ping(context.Context) error
 }
 
-func PingDatabase(c *echo.Context, db DBHealthChecker) error {
-	if err := db.Ping(c.Request().Context()); err != nil {
+func PingDatabase(c *echo.Context, checker DBHealthChecker) error {
+	if err := checker.Ping(c.Request().Context()); err != nil {
 		return echo.NewHTTPError(http.StatusInternalServerError, "database unavailable")
 	}
 	return c.NoContent(http.StatusOK)
