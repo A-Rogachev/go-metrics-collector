@@ -84,7 +84,7 @@ func main() {
 		return handlers.GetAllMetrics(c, memoryStorage)
 	})
 	e.GET("/ping", func(c *echo.Context) error {
-		return handlers.PingDatabase(c, dbHealthChecker)
+		return handlers.PingDatabase(c, log, dbHealthChecker)
 	})
 
 	if err := e.Start(cfg.ServerAddress); err != nil {

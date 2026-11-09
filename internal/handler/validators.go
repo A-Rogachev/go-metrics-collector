@@ -21,3 +21,16 @@ func (mv *MetricValidator) Validate(i any) error {
 	}
 	return nil
 }
+
+func getErrorResponse(errors *validator.ValidationErrors) []ValidationErrorResponse {
+	errorsResponse := make([]ValidationErrorResponse, 0, len(*errors))
+	for _, validationError := range *errors {
+		errorsResponse = append(errorsResponse, ValidationErrorResponse{
+			Field:   validationError.Field(),
+			Tag:     validationError.Tag(),
+			Value:   validationError.Value(),
+			Message: validationError.Error(),
+		})
+	}
+	return errorsResponse
+}

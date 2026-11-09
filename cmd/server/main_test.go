@@ -2,7 +2,9 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -519,4 +521,131 @@ func TestGetMetricValueJSON(t *testing.T) {
 			}
 		})
 	}
+}
+
+type mockDBHealthChecker struct {
+	err   error
+	calls int
+}
+
+func (c *mockDBHealthChecker) Ping(context.Context) error {
+	c.calls++
+	return c.err
+}
+
+func TestPingDatabase(t *testing.T) {
+	tests := []struct {
+		name       string
+		checkerErr error
+		wantStatus int
+	}{
+		{
+			name:       "database available",
+			wantStatus: http.StatusOK,
+		},
+		{
+			name:       "database unavailable",
+			checkerErr: errors.New("database unavailable"),
+			wantStatus: http.StatusServiceUnavailable,
+		},
+	}
+
+	appLogger := middleware.ZerologAdapter{Logger: getLogger("debug")}
+	e := echo.New()
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			checker := &mockDBHealthChecker{
+				err: test.checkerErr,
+			}
+			e.GET("/ping", func(c *echo.Context) error {
+				return handlers.PingDatabase(c, appLogger, checker)
+			})
+			response := httptest.NewRecorder()
+
+			e.ServeHTTP(
+				response,
+				httptest.NewRequest(http.MethodGet, "/ping", nil),
+			)
+
+			assert.Equal(t, test.wantStatus, response.Code)
+			assert.Equal(t, 1, checker.calls)
+		})
+	}
+}
+
+type mockMetricSaver struct {
+	batchMetrics []models.Metric
+}
+
+func (s *mockMetricSaver) SaveOnUpdate(
+	context.Context,
+	models.Metric,
+) error {
+	return nil
+}
+
+func (s *mockMetricSaver) SaveBatchOnUpdate(
+	_ context.Context,
+	metrics []models.Metric,
+) error {
+	s.batchMetrics = append([]models.Metric(nil), metrics...)
+	return nil
+}
+
+func TestBatchMetricUpdate(t *testing.T) {
+	gaugeValue := float64(12.5)
+	counterValue := int64(7)
+
+	metrics := []models.Metric{
+		{
+			ID:    "Alloc",
+			MType: models.Gauge,
+			Value: &gaugeValue,
+		},
+		{
+			ID:    "PollCount",
+			MType: models.Counter,
+			Delta: &counterValue,
+		},
+	}
+
+	storage := int_storage.NewMemStorage()
+	saver := &mockMetricSaver{}
+	appLogger := middleware.ZerologAdapter{Logger: getLogger("debug")}
+
+	e := echo.New()
+	e.Validator = &handlers.MetricValidator{
+		Validator: validator.New(),
+	}
+
+	e.POST("/updates/", func(c *echo.Context) error {
+		return handlers.BatchMetricUpdate(
+			c,
+			storage,
+			saver,
+			appLogger,
+		)
+	})
+
+	body, err := json.Marshal(metrics)
+	assert.NoError(t, err)
+
+	request := httptest.NewRequest(
+		http.MethodPost,
+		"/updates/",
+		bytes.NewBuffer(body),
+	)
+	request.Header.Set("Content-Type", "application/json")
+
+	response := httptest.NewRecorder()
+	e.ServeHTTP(response, request)
+
+	assert.Equal(t, http.StatusOK, response.Code)
+
+	snapshot := storage.Snapshot()
+
+	assert.Equal(t, gaugeValue, snapshot.Gauges["Alloc"])
+	assert.Equal(t, counterValue, snapshot.Counters["PollCount"])
+	assert.Equal(t, metrics, saver.batchMetrics)
 }

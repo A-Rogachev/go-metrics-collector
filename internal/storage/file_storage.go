@@ -1,7 +1,6 @@
 package storage
 
 import (
-	"context"
 	"encoding/json"
 	"io"
 	"os"
@@ -78,9 +77,5 @@ func (fs *FileStorage) UpdateFromSnapshot(snapshot models.MetricSnapshot) error 
 	if err := encoder.Encode(metrics); err != nil {
 		return err
 	}
-	return nil
-}
-
-func (fs *FileStorage) SaveOnUpdate(cts context.Context, metric models.Metric) error {
 	return nil
 }

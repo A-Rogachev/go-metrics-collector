@@ -6,7 +6,7 @@ import (
 	"errors"
 	"time"
 
-	models "github.com/A-Rogachev/go-metrics-collector/internal/model"
+	"github.com/A-Rogachev/go-metrics-collector/internal/repository"
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
 
@@ -30,18 +30,17 @@ func NewDBStorage(driverName string, dsn string) (*DBStorage, error) {
 }
 
 func (s DBStorage) Ping(ctx context.Context) error {
-	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
-	defer cancel()
-	if err := s.db.PingContext(ctx); err != nil {
-		return err
-	}
-	return nil
+	return repository.Retry(ctx, func() error {
+		pingCtx, cancel := context.WithTimeout(
+			ctx,
+			2*time.Second,
+		)
+		defer cancel()
+
+		return s.db.PingContext(pingCtx)
+	})
 }
 
 func (s DBStorage) GetPool() *sql.DB {
 	return s.db
-}
-
-func (s DBStorage) SaveOnUpdate(cts context.Context, metric models.Metric) error {
-	return nil
 }

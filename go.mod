@@ -5,6 +5,7 @@ go 1.26.0
 require (
 	github.com/go-playground/validator/v10 v10.30.5
 	github.com/golang-migrate/migrate/v4 v4.20.1
+	github.com/jackc/pgerrcode v0.0.0-20220416144525-469b46aa5efa
 	github.com/jackc/pgx/v5 v5.12.0
 	github.com/labstack/echo/v5 v5.4.0
 	github.com/rs/zerolog v1.35.1

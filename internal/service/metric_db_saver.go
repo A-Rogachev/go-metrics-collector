@@ -4,6 +4,7 @@ import (
 	"context"
 
 	models "github.com/A-Rogachev/go-metrics-collector/internal/model"
+	"github.com/A-Rogachev/go-metrics-collector/internal/repository"
 )
 
 type MetricRepository interface {
@@ -29,12 +30,16 @@ func (s *MetricDBSaver) SaveOnUpdate(
 	ctx context.Context,
 	metric models.Metric,
 ) error {
-	return s.repository.UpsertMetric(ctx, metric)
+	return repository.Retry(ctx, func() error {
+		return s.repository.UpsertMetric(ctx, metric)
+	})
 }
 
 func (s *MetricDBSaver) SaveBatchOnUpdate(
 	ctx context.Context,
 	metrics []models.Metric,
 ) error {
-	return s.repository.UpsertMetricBatch(ctx, metrics)
+	return repository.Retry(ctx, func() error {
+		return s.repository.UpsertMetricBatch(ctx, metrics)
+	})
 }
