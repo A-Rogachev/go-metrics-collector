@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"time"
 
 	"github.com/A-Rogachev/go-metrics-collector/internal/repository"
 	_ "github.com/jackc/pgx/v5/stdlib"
@@ -31,13 +30,7 @@ func NewDBStorage(driverName string, dsn string) (*DBStorage, error) {
 
 func (s DBStorage) Ping(ctx context.Context) error {
 	return repository.Retry(ctx, func() error {
-		pingCtx, cancel := context.WithTimeout(
-			ctx,
-			2*time.Second,
-		)
-		defer cancel()
-
-		return s.db.PingContext(pingCtx)
+		return s.db.PingContext(ctx)
 	})
 }
 

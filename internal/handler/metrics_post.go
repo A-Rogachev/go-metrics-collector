@@ -37,7 +37,7 @@ func handleCounterMetric(key string, rawValue string, storage Storage) (models.M
 	}
 	metric := models.Metric{
 		ID:    key,
-		MType: models.Gauge,
+		MType: models.Counter,
 		Delta: &delta,
 	}
 	storage.AddCounter(key, delta)
@@ -150,6 +150,7 @@ func BatchMetricUpdate(
 	}
 	if err := saver.SaveBatchOnUpdate(c.Request().Context(), newMetrics); err != nil {
 		logger.Error().Msg(err.Error())
+		return echo.NewHTTPError(http.StatusBadRequest, UnknownError)
 	}
 	return c.NoContent(http.StatusOK)
 }

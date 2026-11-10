@@ -11,6 +11,7 @@ const (
 	InvalidMetricValueMsg = "Invalid metric value"
 	MetricNotFound        = "Metric key not found"
 	JSONParsingError      = "Error while json parsing"
+	UnknownError          = "Unknown error. Ask the administrator"
 )
 
 type Storage interface {

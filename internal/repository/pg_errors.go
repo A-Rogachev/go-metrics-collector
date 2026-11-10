@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"errors"
+	"syscall"
 	"time"
 
 	"github.com/jackc/pgerrcode"
@@ -33,13 +34,16 @@ func Classify(err error) ErrorClassification {
 
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) {
-		return СlassifyPgError(pgErr)
+		return ClassifyPgError(pgErr)
+	}
+	if errors.Is(err, syscall.ECONNREFUSED) {
+		return Retriable
 	}
 
 	return NonRetriable
 }
 
-func СlassifyPgError(pgErr *pgconn.PgError) ErrorClassification {
+func ClassifyPgError(pgErr *pgconn.PgError) ErrorClassification {
 	switch pgErr.Code {
 	// Класс 08 - Ошибки соединения
 	case pgerrcode.ConnectionException,
@@ -88,10 +92,6 @@ func СlassifyPgError(pgErr *pgconn.PgError) ErrorClassification {
 func Retry(ctx context.Context, operation func() error) error {
 	var lastErr error
 	for attempt := 0; attempt < maxAttempts+1; attempt++ {
-		if err := ctx.Err(); err != nil {
-			return err
-		}
-
 		err := operation()
 		if err == nil {
 			return nil
@@ -104,7 +104,14 @@ func Retry(ctx context.Context, operation func() error) error {
 		if attempt == maxAttempts {
 			break
 		}
-		time.Sleep(time.Duration(delayTimes[attempt]) * time.Second)
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+
+		case <-time.After(
+			time.Duration(delayTimes[attempt]),
+		):
+		}
 	}
 	return lastErr
 }

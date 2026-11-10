@@ -57,7 +57,7 @@ func (r *PostgresMetricsRepository) UpsertMetricBatch(
 		return err
 	}
 	for _, m := range metrics {
-		_, err := r.db.ExecContext(
+		_, err := tx.ExecContext(
 			ctx,
 			upsertMetricQuery,
 			m.ID,

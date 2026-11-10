@@ -23,15 +23,18 @@ func TestMetricStorageCollect(t *testing.T) {
 	pollInterval, polling := 1, false
 
 	storage.Collect(polling, pollInterval)
+	gaugesCount, _ := storage.GetMetricsCount()
+	counterValue, ok := storage.GetCounter("PollCount")
 
-	assert.Equal(t, storage.Counters["PollCount"], int64(1), "PollCount should be 1")
-	assert.Greater(t, len(storage.Gauges), 0, "gauges count greaater than 0")
+	assert.Equal(t, ok, true, "value wasnt recorded")
+	assert.Equal(t, counterValue, int64(1), "PollCount should be 1")
+	assert.Greater(t, gaugesCount, 0, "gauges count greaater than 0")
 }
 
 func TestMetricStorageSnapshot(t *testing.T) {
 	storage := agent.NewAgentStorage()
-	storage.Gauges["Alloc"] = 123456
-	storage.Counters["PollCount"] = int64(1)
+	storage.SetGauge("Alloc", 123456)
+	storage.AddCounter("PollCount", int64(1))
 	storageSnapshot := storage.Snapshot()
 	assert.Equal(t, storageSnapshot.Gauges["Alloc"], float64(123456), "Alloc should be 123456")
 	assert.Equal(t, storageSnapshot.Counters["PollCount"], int64(1), "PollCount should be 1")

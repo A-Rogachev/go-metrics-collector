@@ -546,7 +546,7 @@ func TestPingDatabase(t *testing.T) {
 		{
 			name:       "database unavailable",
 			checkerErr: errors.New("database unavailable"),
-			wantStatus: http.StatusServiceUnavailable,
+			wantStatus: http.StatusInternalServerError,
 		},
 	}
 
@@ -637,7 +637,6 @@ func TestBatchMetricUpdate(t *testing.T) {
 		bytes.NewBuffer(body),
 	)
 	request.Header.Set("Content-Type", "application/json")
-
 	response := httptest.NewRecorder()
 	e.ServeHTTP(response, request)
 

@@ -20,21 +20,18 @@ type DBHealthChecker interface {
 func PingDatabase(c *echo.Context, logger loggers.Logger, checker DBHealthChecker) error {
 	if err := checker.Ping(c.Request().Context()); err != nil {
 		switch {
-		case errors.Is(err, context.DeadlineExceeded):
-			logger.Error().Msg(err.Error())
-			return echo.NewHTTPError(
-				http.StatusServiceUnavailable,
-				"database ping timeout",
-			)
 		case errors.Is(err, context.Canceled):
+			return err
+		case errors.Is(err, context.DeadlineExceeded):
+			logger.Error().Msg("database ping timeout")
 			return echo.NewHTTPError(
-				http.StatusRequestTimeout,
-				"request canceled",
+				http.StatusInternalServerError,
+				"database ping timeout",
 			)
 		default:
 			logger.Error().Msg(err.Error())
 			return echo.NewHTTPError(
-				http.StatusServiceUnavailable,
+				http.StatusInternalServerError,
 				"database unavailable",
 			)
 		}
@@ -54,7 +51,6 @@ func GetMetricValue(c *echo.Context, s Storage) error {
 		return echo.NewHTTPError(http.StatusNotFound, MetricNotFound)
 	}
 	return c.String(http.StatusOK, value)
-
 }
 
 func GetMetricValueJSON(c *echo.Context, s Storage) error {

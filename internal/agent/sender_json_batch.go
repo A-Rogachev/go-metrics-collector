@@ -12,6 +12,8 @@ import (
 	models "github.com/A-Rogachev/go-metrics-collector/internal/model"
 )
 
+const BatchSize = 50
+
 type JSONBatchSender struct {
 	client *http.Client
 	logger *slog.Logger
