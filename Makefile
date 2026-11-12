@@ -75,11 +75,61 @@ test9:  ## Запуск тестов для итерации 9
 	-server-port=$$SERVER_PORT \
 	-source-path=.
 
+test10:  ## Запуск тестов для итерации 10
+	SERVER_PORT=8080; \
+	ADDRESS="localhost:$${SERVER_PORT}"; \
+	TEMP_FILE=$$(mktemp); \
+	metricstest -test.v -test.run=^TestIteration10[AB]$$ \
+	-agent-binary-path=cmd/agent/agent \
+	-binary-path=cmd/server/server \
+    -database-dsn='postgres://postgres:password@127.0.0.1:5432/metrics?sslmode=disable' \
+	-server-port=$$SERVER_PORT \
+	-source-path=.
+
+test11:  ## Запуск тестов для итерации 11
+	SERVER_PORT=8080; \
+	ADDRESS="localhost:$${SERVER_PORT}"; \
+	TEMP_FILE=$$(mktemp); \
+	metricstest -test.v -test.run=^TestIteration11$$ \
+	-agent-binary-path=cmd/agent/agent \
+	-binary-path=cmd/server/server \
+    -database-dsn='postgres://postgres:password@127.0.0.1:5432/metrics?sslmode=disable' \
+	-server-port=$$SERVER_PORT \
+	-source-path=.
+
+test12:  ## Запуск тестов для итерации 12
+	SERVER_PORT=8080; \
+	ADDRESS="localhost:$${SERVER_PORT}"; \
+	TEMP_FILE=$$(mktemp); \
+	metricstest -test.v -test.run=^TestIteration12$$ \
+	-agent-binary-path=cmd/agent/agent \
+	-binary-path=cmd/server/server \
+    -database-dsn='postgres://postgres:password@127.0.0.1:5432/metrics?sslmode=disable' \
+	-server-port=$$SERVER_PORT \
+	-source-path=.
+
+test13:  ## Запуск тестов для итерации 13
+	SERVER_PORT=8080; \
+	ADDRESS="localhost:$${SERVER_PORT}"; \
+	TEMP_FILE=$$(mktemp); \
+	metricstest -test.v -test.run=^TestIteration13$$ \
+	-agent-binary-path=cmd/agent/agent \
+	-binary-path=cmd/server/server \
+    -database-dsn='postgres://postgres:password@127.0.0.1:5432/metrics?sslmode=disable' \
+	-server-port=$$SERVER_PORT \
+	-source-path=.
+
 server:  ## Запуск сервера
 	go run ./cmd/server/ -i=5 -r=false
 
 agent:
 	go run ./cmd/agent/ -log-level=info
+
+start:
+	sudo docker compose up -d
+
+stop:
+	sudo docker compose down -v
 
 localtest:  ## Запуск юнит и интеграционных тестов
 	@echo "\n| ===============> Running agent tests <=============== |\n"
@@ -106,3 +156,8 @@ statictest:  ## Запуск статического анализатора
 
 alltest:  ## Запуск локальных и cicd тестов
 	make localtest && make statictest
+
+#1/ сделать на сервере универсальный сейвер чтобы мемори тоже не всегда сохранялись (убрать лишнее из хендлеров)
+#2/ рефакторинг кода агента - убрать в internal
+#3/ написать юнит тесты для новых батчевых запросов
+#4/ retryable ошибки на итерацию 13

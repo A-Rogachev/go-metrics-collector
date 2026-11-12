@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	agent "github.com/A-Rogachev/go-metrics-collector/internal/agent"
 	models "github.com/A-Rogachev/go-metrics-collector/internal/model"
 
 	"github.com/stretchr/testify/assert"
@@ -18,24 +19,23 @@ func TestMetricStorageCollect(t *testing.T) {
 	if testing.Short() {
 		t.Skip(skipTestMessage)
 	}
-	storage := AgentStorage{
-		gauges:   make(map[string]float64),
-		counters: map[string]int64{"PollCount": int64(0)},
-	}
+	storage := agent.NewAgentStorage()
 	pollInterval, polling := 1, false
 
-	storage.collect(polling, pollInterval)
+	storage.Collect(polling, pollInterval)
+	gaugesCount, _ := storage.GetMetricsCount()
+	counterValue, ok := storage.GetCounter("PollCount")
 
-	assert.Equal(t, storage.counters["PollCount"], int64(1), "PollCount should be 1")
-	assert.Greater(t, len(storage.gauges), 0, "gauges count greaater than 0")
+	assert.Equal(t, ok, true, "value wasnt recorded")
+	assert.Equal(t, counterValue, int64(1), "PollCount should be 1")
+	assert.Greater(t, gaugesCount, 0, "gauges count greaater than 0")
 }
 
 func TestMetricStorageSnapshot(t *testing.T) {
-	storage := AgentStorage{
-		gauges:   map[string]float64{"Alloc": 123456},
-		counters: map[string]int64{"PollCount": int64(1)},
-	}
-	storageSnapshot := storage.snapshot()
+	storage := agent.NewAgentStorage()
+	storage.SetGauge("Alloc", 123456)
+	storage.AddCounter("PollCount", int64(1))
+	storageSnapshot := storage.Snapshot()
 	assert.Equal(t, storageSnapshot.Gauges["Alloc"], float64(123456), "Alloc should be 123456")
 	assert.Equal(t, storageSnapshot.Counters["PollCount"], int64(1), "PollCount should be 1")
 }
@@ -60,7 +60,8 @@ func TestSendRequests(t *testing.T) {
 	}
 
 	logger := getLogger("info")
-	_ = sendRequests(client, logger, snapshot, server.URL+"/update")
+	sender := agent.NewQueryParamsSender(client, logger, server.URL+"/update")
+	_ = sender.SendMetrics(snapshot)
 
 	assert.ElementsMatch(t, []string{
 		"/update/gauge/Alloc/1.230000",
@@ -100,7 +101,9 @@ func TestSendMetric(t *testing.T) {
 			defer server.Close()
 
 			client := server.Client()
-			err := sendMetric(client, server.URL+"/update/gauge/1/2")
+			logger := getLogger("info")
+			sender := agent.NewQueryParamsSender(client, logger, server.URL+"/update/gauge/1/2")
+			err := sender.SendMetric(sender.URL + "/update/gauge/1/2")
 
 			assert.Equal(t, test.wantErr, err != nil, "error while sending metric")
 		})
@@ -146,7 +149,9 @@ func TestSendJSONMetric(t *testing.T) {
 			defer server.Close()
 
 			client := server.Client()
-			err := sendJSONMetric(client, server.URL+"/update/", test.requestBody)
+			logger := getLogger("info")
+			sender := agent.NewJSONSender(client, logger, server.URL)
+			err := sender.SendJSONMetric(test.requestBody)
 
 			assert.Equal(t, test.wantErr, err != nil, "error while sending metric")
 		})
@@ -192,7 +197,8 @@ func TestSendJSONRequests(t *testing.T) {
 		`{"id":"PollCount","type":"counter","delta":2}`,
 	}
 	logger := getLogger("info")
-	_ = sendJSONRequests(client, logger, snapshot, server.URL+"/update/")
+	sender := agent.NewJSONSender(client, logger, server.URL)
+	_ = sender.SendMetrics(snapshot)
 
 	assert.JSONEq(t, expected[0], received[0])
 	assert.JSONEq(t, expected[1], received[1])

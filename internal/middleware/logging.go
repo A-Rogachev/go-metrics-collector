@@ -29,13 +29,15 @@ func GetLoggingMiddleware(logger loggers.Logger) echo.MiddlewareFunc {
 		LogMethod:        true,
 		LogStatus:        true,
 		LogContentLength: true,
+		LogResponseSize:  true,
 		LogValuesFunc: func(c *echo.Context, v middleware.RequestLoggerValues) error {
 			message := fmt.Sprintf(
-				"%d %s %s (contentLength=%s)",
+				"%d %s %s (contentLength=%s, responseSize=%d)",
 				v.Status,
 				v.Method,
 				v.URI,
 				v.ContentLength,
+				v.ResponseSize,
 			)
 			if v.Status >= http.StatusBadRequest {
 				logger.Error().Msg(message)

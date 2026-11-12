@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"time"
@@ -51,7 +52,14 @@ func (service *MetricSaver) saveNow() error {
 	return service.saver.UpdateFromSnapshot(snapshot)
 }
 
-func (service *MetricSaver) SaveOnUpdate() error {
+func (service *MetricSaver) SaveBatchOnUpdate(
+	ctx context.Context,
+	metrics []models.Metric,
+) error {
+	return nil
+}
+
+func (service *MetricSaver) SaveOnUpdate(_ context.Context, _ models.Metric) error {
 	if service.isPeriodical {
 		return nil
 	}
