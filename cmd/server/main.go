@@ -63,6 +63,7 @@ func main() {
 
 	e.Use(middleware.GetLoggingMiddleware(log))
 	e.Use(middleware.GzipRequestMiddleware(log))
+	e.Use(middleware.MetricSigningMiddleware(log, config.ConfigParamStringCounter("KEY", "key")))
 	e.Use(middleware.GzipResponseMiddleware)
 
 	e.POST("update/", func(c *echo.Context) error {
