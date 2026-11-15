@@ -119,6 +119,19 @@ test13:  ## Запуск тестов для итерации 13
 	-server-port=$$SERVER_PORT \
 	-source-path=.
 
+test14:  ## Запуск тестов для итерации 14
+	SERVER_PORT=8080; \
+	ADDRESS="localhost:$${SERVER_PORT}"; \
+	TEMP_FILE=$$(mktemp); \
+	metricstest -test.v -test.run=^TestIteration14$$ \
+	-agent-binary-path=cmd/agent/agent \
+	-binary-path=cmd/server/server \
+    -database-dsn='postgres://postgres:password@127.0.0.1:5432/metrics?sslmode=disable' \
+    -key="$${TEMP_FILE}" \
+	-server-port=$$SERVER_PORT \
+	-source-path=.
+
+
 server:  ## Запуск сервера
 	go run ./cmd/server/ -i=5 -r=false
 
@@ -156,8 +169,3 @@ statictest:  ## Запуск статического анализатора
 
 alltest:  ## Запуск локальных и cicd тестов
 	make localtest && make statictest
-
-#1/ сделать на сервере универсальный сейвер чтобы мемори тоже не всегда сохранялись (убрать лишнее из хендлеров)
-#2/ рефакторинг кода агента - убрать в internal
-#3/ написать юнит тесты для новых батчевых запросов
-#4/ retryable ошибки на итерацию 13
