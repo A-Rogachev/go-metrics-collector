@@ -133,7 +133,7 @@ test14:  ## Запуск тестов для итерации 14
 
 
 server:  ## Запуск сервера
-	go run ./cmd/server/ -i=5 -r=false
+	go run ./cmd/server/ -i=5 -r=true
 
 agent:
 	go run ./cmd/agent/ -log-level=info

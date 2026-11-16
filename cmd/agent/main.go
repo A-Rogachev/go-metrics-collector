@@ -26,7 +26,7 @@ func main() {
 		logger,
 		"http://"+cfg.APIConfig.Address+"/updates",
 		agent.NewMetricSigner(
-			config.ConfigParamStringCounter("KEY", "key"),
+			config.ConfigParamStringCounter("KEY", "k"),
 			sha256.New,
 		),
 	)
