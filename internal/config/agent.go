@@ -16,6 +16,7 @@ type PollConfig struct {
 
 type ReportConfig struct {
 	ReportInterval int `env:"REPORT_INTERVAL"`
+	RateLimit      int `env:"RATE_LIMIT"`
 }
 
 type Additional struct {
@@ -38,6 +39,7 @@ func GetAgentConfig() AgentConfig {
 	flag.IntVar(&cfg.ReportConfig.ReportInterval, "r", 10, "how often send metrics via api")
 	flag.IntVar(&cfg.PollConfig.PollInterval, "p", 2, "how often get metrics via runtime package")
 	flag.StringVar(&cfg.SecretKey, "k", "", "key for metrics hash check")
+	flag.IntVar(&cfg.ReportConfig.RateLimit, "l", 10, "send requests limit")
 	flag.Parse()
 
 	address, exists := os.LookupEnv("ADDRESS")
@@ -62,6 +64,14 @@ func GetAgentConfig() AgentConfig {
 	key, exists := os.LookupEnv("KEY")
 	if exists {
 		cfg.SecretKey = key
+	}
+
+	rateLimit, exists := os.LookupEnv("RATE_LIMIT")
+	if exists {
+		val, err := strconv.Atoi(rateLimit)
+		if err == nil && 100 > val && val > 0 {
+			cfg.RateLimit = val
+		}
 	}
 
 	return cfg
