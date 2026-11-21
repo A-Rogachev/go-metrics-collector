@@ -15,7 +15,8 @@ type MetricSender interface {
 	SendMetrics(models.MetricSnapshot) map[string]int64
 	SendMetricsPeriodically(
 		<-chan models.MetricSnapshot,
-		chan<- map[string]int64, time.Duration,
+		chan<- map[string]int64,
+		time.Duration,
 	)
 }
 
@@ -46,13 +47,13 @@ func main() {
 	var wg sync.WaitGroup
 	wg.Go(func() { tempStorage.PeriodicalSnapshot(shapshotChan, time.Duration(cfg.ReportConfig.ReportInterval)) })
 	wg.Go(func() {
-		go sender.SendMetricsPeriodically(
+		sender.SendMetricsPeriodically(
 			shapshotChan,
 			countersChan,
 			time.Duration(cfg.ReportConfig.ReportInterval),
 		)
 	})
-	wg.Go(func() { go tempStorage.SubtractCounters(countersChan) })
+	wg.Go(func() { tempStorage.SubtractCounters(countersChan) })
 	wg.Wait()
 
 }

@@ -22,9 +22,10 @@ type AgentStorage struct {
 }
 
 func NewAgentStorage() *AgentStorage {
+
 	return &AgentStorage{
 		gauges:   make(map[string]float64),
-		counters: map[string]int64{"PollCount": 0},
+		counters: map[string]int64{"PollCount": int64(0)},
 	}
 }
 
@@ -84,7 +85,9 @@ func (s *AgentStorage) SubtractCounters(ch <-chan map[string]int64) {
 }
 
 func (s *AgentStorage) Collect(polling bool, interval int) {
-	go func() {
+	var wg sync.WaitGroup
+
+	wg.Go(func() {
 		for {
 			m := runtime.MemStats{}
 			runtime.ReadMemStats(&m)
@@ -126,9 +129,9 @@ func (s *AgentStorage) Collect(polling bool, interval int) {
 			}
 			pause(time.Duration(interval))
 		}
-	}()
+	})
 
-	go func() {
+	wg.Go(func() {
 		for {
 			v, _ := mem.VirtualMemory()
 
@@ -143,8 +146,11 @@ func (s *AgentStorage) Collect(polling bool, interval int) {
 			}
 			pause(time.Duration(interval))
 		}
-	}()
+	})
 
+	if !polling {
+		wg.Wait()
+	}
 }
 
 func (s *AgentStorage) PeriodicalSnapshot(

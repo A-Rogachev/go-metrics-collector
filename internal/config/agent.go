@@ -6,6 +6,11 @@ import (
 	"strconv"
 )
 
+const (
+	MaxRateLimit = 100
+	MinRateLimit = 0
+)
+
 type APIConfig struct {
 	Address string `env:"ADDRESS"`
 }
@@ -28,7 +33,7 @@ type AgentConfig struct {
 	PollConfig
 	ReportConfig
 	Additional
-	SecretKey string
+	SecretKey string `env:"KEY"`
 }
 
 func GetAgentConfig() AgentConfig {
@@ -69,7 +74,7 @@ func GetAgentConfig() AgentConfig {
 	rateLimit, exists := os.LookupEnv("RATE_LIMIT")
 	if exists {
 		val, err := strconv.Atoi(rateLimit)
-		if err == nil && 100 > val && val > 0 {
+		if err == nil && MaxRateLimit >= val && val > MinRateLimit {
 			cfg.RateLimit = val
 		}
 	}

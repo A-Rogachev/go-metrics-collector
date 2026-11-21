@@ -12,15 +12,15 @@ const (
 )
 
 type FileStorageConfig struct {
-	StoreInterval   int
-	FileStoragePath string
-	Restore         bool
+	StoreInterval   int    `env:"STORE_INTERVAL"`
+	FileStoragePath string `env:"FILE_STORAGE_PATH"`
+	Restore         bool   `env:"RESTORE"`
 }
 
 type ServerConfig struct {
-	ServerAddress string
+	ServerAddress string `env:"ADDRESS"`
 	LogLevel      string
-	SecretKey     string
+	SecretKey     string `env:"KEY"`
 	FileStorageConfig
 }
 

@@ -28,8 +28,8 @@ func TestMetricStorageCollect(t *testing.T) {
 	counterValue, ok := storage.GetCounter("PollCount")
 
 	assert.Equal(t, ok, true, "value wasnt recorded")
-	assert.Equal(t, counterValue, int64(1), "PollCount should be 1")
-	assert.Greater(t, gaugesCount, 0, "gauges count greaater than 0")
+	assert.Equal(t, int64(1), counterValue, "PollCount should be 1")
+	assert.Greater(t, gaugesCount, 0, "gauges count greater than 0")
 }
 
 func TestMetricStorageSnapshot(t *testing.T) {
