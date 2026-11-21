@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"time"
 
 	models "github.com/A-Rogachev/go-metrics-collector/internal/model"
 )
@@ -127,4 +128,40 @@ func (s *JSONBatchSender) sendJSONMetricBatch(metrics []models.Metric) error {
 		return err
 	}
 	return nil
+}
+
+func (s *JSONBatchSender) SendMetricsPeriodically(
+	shapshotChan <-chan models.MetricSnapshot,
+	countersChan chan<- map[string]int64,
+	period time.Duration,
+) {
+	for {
+		metrics := <-shapshotChan
+		sentCounters := make(map[string]int64, 0)
+		var metricsToSend []models.Metric
+		for key, value := range metrics.Gauges {
+			metricsToSend = append(
+				metricsToSend,
+				models.Metric{ID: key, MType: models.Gauge, Value: &value},
+			)
+		}
+		for key, value := range metrics.Counters {
+			metricsToSend = append(
+				metricsToSend,
+				models.Metric{ID: key, MType: models.Counter, Delta: &value},
+			)
+			sentCounters[key] = value
+		}
+		if len(metricsToSend) > 0 {
+			err := s.sendBatches(metricsToSend)
+			if err != nil {
+				s.logger.Debug(err.Error())
+				countersChan <- make(map[string]int64, 0)
+			} else {
+				s.logger.Info("Metrics sent to the server")
+				countersChan <- sentCounters
+			}
+		}
+		pause(time.Second * period)
+	}
 }

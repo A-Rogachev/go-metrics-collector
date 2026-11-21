@@ -3,6 +3,7 @@ package main
 import (
 	"crypto/sha256"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/A-Rogachev/go-metrics-collector/internal/agent"
@@ -12,6 +13,10 @@ import (
 
 type MetricSender interface {
 	SendMetrics(models.MetricSnapshot) map[string]int64
+	SendMetricsPeriodically(
+		<-chan models.MetricSnapshot,
+		chan<- map[string]int64, time.Duration,
+	)
 }
 
 func main() {
@@ -19,31 +24,35 @@ func main() {
 	logger := getLogger(cfg.Additional.LogLevel)
 
 	tempStorage := agent.NewAgentStorage()
-	// resCh := make(chan models.Metric)
 
 	periodicPolling := true
 	tempStorage.Collect(periodicPolling, cfg.PollConfig.PollInterval)
 
+	client := &http.Client{}
+	url := "http://" + cfg.APIConfig.Address + "/updates"
 	var sender MetricSender = agent.NewJSONBatchSender(
-		&http.Client{},
+		client,
 		logger,
-		"http://"+cfg.APIConfig.Address+"/updates",
+		url,
 		agent.NewMetricSigner(
 			config.ConfigParamStringCounter("KEY", "k"),
 			sha256.New,
 		),
 	)
 
-	for {
-		time.Sleep(time.Second * time.Duration(cfg.ReportConfig.ReportInterval))
-		snapshot := tempStorage.Snapshot()
-		sentCounters := sender.SendMetrics(snapshot)
-		tempStorage.SubtractCounters(sentCounters)
-	}
-}
+	shapshotChan := make(chan models.MetricSnapshot)
+	countersChan := make(chan map[string]int64)
 
-// TODO: remove if not used
-// NOTE: старая реализация с отправкой метрик по одному в json
-// var sender MetricSender = agent.NewJSONSender(&http.Client{}, logger, "http://"+cfg.APIConfig.Address+"/update")
-// NOTE: старая реализация с отправкой метрик через параметры запроса
-// sender = agent.NewQueryParamsSender(&http.Client{}, logger, "http://"+cfg.APIConfig.Address+"/update")
+	var wg sync.WaitGroup
+	wg.Go(func() { tempStorage.PeriodicalSnapshot(shapshotChan, time.Duration(cfg.ReportConfig.ReportInterval)) })
+	wg.Go(func() {
+		go sender.SendMetricsPeriodically(
+			shapshotChan,
+			countersChan,
+			time.Duration(cfg.ReportConfig.ReportInterval),
+		)
+	})
+	wg.Go(func() { go tempStorage.SubtractCounters(countersChan) })
+	wg.Wait()
+
+}

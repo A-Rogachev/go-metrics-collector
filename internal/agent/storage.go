@@ -11,8 +11,8 @@ import (
 	"github.com/shirou/gopsutil/v4/mem"
 )
 
-func pause(intervalSeconds int) {
-	time.Sleep(time.Second * time.Duration(intervalSeconds))
+func pause(interval time.Duration) {
+	time.Sleep(time.Second * interval)
 }
 
 type AgentStorage struct {
@@ -69,15 +69,17 @@ func (s *AgentStorage) Snapshot() models.MetricSnapshot {
 	return models.MetricSnapshot{Gauges: gauges, Counters: counters}
 }
 
-func (s *AgentStorage) SubtractCounters(sentCounters map[string]int64) {
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
-
-	for key, value := range sentCounters {
-		s.counters[key] -= value
-		if s.counters[key] < 0 {
-			s.counters[key] = 0
+func (s *AgentStorage) SubtractCounters(ch <-chan map[string]int64) {
+	for {
+		sentCounters := <-ch
+		s.mutex.Lock()
+		for key, value := range sentCounters {
+			s.counters[key] -= value
+			if s.counters[key] < 0 {
+				s.counters[key] = 0
+			}
 		}
+		s.mutex.Unlock()
 	}
 }
 
@@ -122,7 +124,7 @@ func (s *AgentStorage) Collect(polling bool, interval int) {
 			if !polling { // однократное срабатывание при polling == false
 				return
 			}
-			pause(interval)
+			pause(time.Duration(interval))
 		}
 	}()
 
@@ -139,8 +141,23 @@ func (s *AgentStorage) Collect(polling bool, interval int) {
 			if !polling { // однократное срабатывание при polling == false
 				return
 			}
-			pause(interval)
+			pause(time.Duration(interval))
 		}
 	}()
 
+}
+
+func (s *AgentStorage) PeriodicalSnapshot(
+	ch chan models.MetricSnapshot,
+	period time.Duration,
+) {
+	for {
+		s.mutex.Lock()
+		gauges, counters := maps.Clone(s.gauges), maps.Clone(s.counters)
+		s.mutex.Unlock()
+
+		ch <- models.MetricSnapshot{Gauges: gauges, Counters: counters}
+
+		pause(period)
+	}
 }
