@@ -20,6 +20,7 @@ type FileStorageConfig struct {
 type ServerConfig struct {
 	ServerAddress string
 	LogLevel      string
+	SecretKey     string
 	FileStorageConfig
 }
 
@@ -31,6 +32,7 @@ func GetServerConfig() ServerConfig {
 	flag.IntVar(&cfg.StoreInterval, "i", 300, "how often save metrics into file")
 	flag.StringVar(&cfg.FileStoragePath, "f", "./temp.file", "filename path")
 	flag.BoolVar(&cfg.Restore, "r", true, "restore after server reload")
+	flag.StringVar(&cfg.SecretKey, "k", "", "key for metrics hash check")
 	flag.Parse()
 
 	addr, exists := os.LookupEnv("ADDRESS")
@@ -57,6 +59,11 @@ func GetServerConfig() ServerConfig {
 	path, exists := os.LookupEnv("FILE_STORAGE_PATH")
 	if exists {
 		cfg.FileStoragePath = path
+	}
+
+	key, exists := os.LookupEnv("KEY")
+	if exists {
+		cfg.SecretKey = key
 	}
 
 	return cfg

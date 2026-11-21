@@ -2,6 +2,7 @@ package main
 
 import (
 	"compress/gzip"
+	"crypto/sha256"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -60,7 +61,8 @@ func TestSendRequests(t *testing.T) {
 	}
 
 	logger := getLogger("info")
-	sender := agent.NewQueryParamsSender(client, logger, server.URL+"/update")
+	signer := agent.NewMetricSigner(nil, sha256.New)
+	sender := agent.NewQueryParamsSender(client, logger, server.URL+"/update", signer)
 	_ = sender.SendMetrics(snapshot)
 
 	assert.ElementsMatch(t, []string{
@@ -102,7 +104,8 @@ func TestSendMetric(t *testing.T) {
 
 			client := server.Client()
 			logger := getLogger("info")
-			sender := agent.NewQueryParamsSender(client, logger, server.URL+"/update/gauge/1/2")
+			signer := agent.NewMetricSigner(nil, sha256.New)
+			sender := agent.NewQueryParamsSender(client, logger, server.URL+"/update/gauge/1/2", signer)
 			err := sender.SendMetric(sender.URL + "/update/gauge/1/2")
 
 			assert.Equal(t, test.wantErr, err != nil, "error while sending metric")
@@ -150,7 +153,8 @@ func TestSendJSONMetric(t *testing.T) {
 
 			client := server.Client()
 			logger := getLogger("info")
-			sender := agent.NewJSONSender(client, logger, server.URL)
+			signer := agent.NewMetricSigner(nil, sha256.New)
+			sender := agent.NewJSONSender(client, logger, server.URL, signer)
 			err := sender.SendJSONMetric(test.requestBody)
 
 			assert.Equal(t, test.wantErr, err != nil, "error while sending metric")
@@ -197,7 +201,8 @@ func TestSendJSONRequests(t *testing.T) {
 		`{"id":"PollCount","type":"counter","delta":2}`,
 	}
 	logger := getLogger("info")
-	sender := agent.NewJSONSender(client, logger, server.URL)
+	signer := agent.NewMetricSigner(nil, sha256.New)
+	sender := agent.NewJSONSender(client, logger, server.URL, signer)
 	_ = sender.SendMetrics(snapshot)
 
 	assert.JSONEq(t, expected[0], received[0])

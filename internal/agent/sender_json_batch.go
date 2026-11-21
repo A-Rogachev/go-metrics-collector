@@ -18,13 +18,20 @@ type JSONBatchSender struct {
 	client *http.Client
 	logger *slog.Logger
 	URL    string
+	signer Signer
 }
 
-func NewJSONBatchSender(client *http.Client, logger *slog.Logger, baseURL string) *JSONBatchSender {
+func NewJSONBatchSender(
+	client *http.Client,
+	logger *slog.Logger,
+	baseURL string,
+	signer Signer,
+) *JSONBatchSender {
 	return &JSONBatchSender{
 		client: client,
 		logger: logger,
 		URL:    baseURL + "/",
+		signer: signer,
 	}
 }
 
@@ -100,6 +107,12 @@ func (s *JSONBatchSender) sendJSONMetricBatch(metrics []models.Metric) error {
 	}
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("Content-Encoding", "gzip")
+
+	metricSign, err := s.signer.SignMetric(jsonBody)
+	if err == nil {
+		request.Header.Set("HashSHA256", metricSign)
+	}
+
 	response, err := s.client.Do(request)
 	if err != nil {
 		return err

@@ -13,13 +13,20 @@ type QueryParamsSender struct {
 	client *http.Client
 	logger *slog.Logger
 	URL    string
+	signer Signer
 }
 
-func NewQueryParamsSender(client *http.Client, logger *slog.Logger, baseURL string) *QueryParamsSender {
+func NewQueryParamsSender(
+	client *http.Client,
+	logger *slog.Logger,
+	baseURL string,
+	signer Signer,
+) *QueryParamsSender {
 	return &QueryParamsSender{
 		client: client,
 		logger: logger,
 		URL:    baseURL,
+		signer: signer,
 	}
 }
 

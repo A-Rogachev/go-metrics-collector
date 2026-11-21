@@ -1,8 +1,8 @@
 package main
 
 import (
+	"crypto/sha256"
 	"net/http"
-
 	"time"
 
 	"github.com/A-Rogachev/go-metrics-collector/internal/agent"
@@ -25,6 +25,10 @@ func main() {
 		&http.Client{},
 		logger,
 		"http://"+cfg.APIConfig.Address+"/updates",
+		agent.NewMetricSigner(
+			config.ConfigParamStringCounter("KEY", "k"),
+			sha256.New,
+		),
 	)
 	// NOTE: старая реализация с отправкой метрик по одному в json
 	// var sender MetricSender = agent.NewJSONSender(&http.Client{}, logger, "http://"+cfg.APIConfig.Address+"/update")
