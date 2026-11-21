@@ -19,7 +19,10 @@ func main() {
 	logger := getLogger(cfg.Additional.LogLevel)
 
 	tempStorage := agent.NewAgentStorage()
-	go tempStorage.Collect(true, cfg.PollConfig.PollInterval)
+	// resCh := make(chan models.Metric)
+
+	periodicPolling := true
+	tempStorage.Collect(periodicPolling, cfg.PollConfig.PollInterval)
 
 	var sender MetricSender = agent.NewJSONBatchSender(
 		&http.Client{},
@@ -30,10 +33,7 @@ func main() {
 			sha256.New,
 		),
 	)
-	// NOTE: старая реализация с отправкой метрик по одному в json
-	// var sender MetricSender = agent.NewJSONSender(&http.Client{}, logger, "http://"+cfg.APIConfig.Address+"/update")
-	// NOTE: старая реализация с отправкой метрик через параметры запроса
-	// sender = agent.NewQueryParamsSender(&http.Client{}, logger, "http://"+cfg.APIConfig.Address+"/update")
+
 	for {
 		time.Sleep(time.Second * time.Duration(cfg.ReportConfig.ReportInterval))
 		snapshot := tempStorage.Snapshot()
@@ -41,3 +41,9 @@ func main() {
 		tempStorage.SubtractCounters(sentCounters)
 	}
 }
+
+// TODO: remove if not used
+// NOTE: старая реализация с отправкой метрик по одному в json
+// var sender MetricSender = agent.NewJSONSender(&http.Client{}, logger, "http://"+cfg.APIConfig.Address+"/update")
+// NOTE: старая реализация с отправкой метрик через параметры запроса
+// sender = agent.NewQueryParamsSender(&http.Client{}, logger, "http://"+cfg.APIConfig.Address+"/update")

@@ -8,7 +8,12 @@ import (
 	"time"
 
 	models "github.com/A-Rogachev/go-metrics-collector/internal/model"
+	"github.com/shirou/gopsutil/v4/mem"
 )
+
+func pause(intervalSeconds int) {
+	time.Sleep(time.Second * time.Duration(intervalSeconds))
+}
 
 type AgentStorage struct {
 	mutex    sync.Mutex
@@ -77,45 +82,65 @@ func (s *AgentStorage) SubtractCounters(sentCounters map[string]int64) {
 }
 
 func (s *AgentStorage) Collect(polling bool, interval int) {
-	for {
-		m := runtime.MemStats{}
-		runtime.ReadMemStats(&m)
-		s.mutex.Lock()
-		s.gauges = map[string]float64{
-			"Alloc":         float64(m.Alloc),
-			"BuckHashSys":   float64(m.BuckHashSys),
-			"Frees":         float64(m.Frees),
-			"GCCPUFraction": m.GCCPUFraction,
-			"GCSys":         float64(m.GCSys),
-			"HeapAlloc":     float64(m.HeapAlloc),
-			"HeapIdle":      float64(m.HeapIdle),
-			"HeapInuse":     float64(m.HeapInuse),
-			"HeapObjects":   float64(m.HeapObjects),
-			"HeapReleased":  float64(m.HeapReleased),
-			"HeapSys":       float64(m.HeapSys),
-			"LastGC":        float64(m.LastGC),
-			"Lookups":       float64(m.Lookups),
-			"MCacheInuse":   float64(m.MCacheInuse),
-			"MCacheSys":     float64(m.MCacheSys),
-			"MSpanInuse":    float64(m.MSpanInuse),
-			"MSpanSys":      float64(m.MSpanSys),
-			"Mallocs":       float64(m.Mallocs),
-			"NextGC":        float64(m.NextGC),
-			"NumForcedGC":   float64(m.NumForcedGC),
-			"NumGC":         float64(m.NumGC),
-			"OtherSys":      float64(m.OtherSys),
-			"PauseTotalNs":  float64(m.PauseTotalNs),
-			"StackInuse":    float64(m.StackInuse),
-			"StackSys":      float64(m.StackSys),
-			"Sys":           float64(m.Sys),
-			"TotalAlloc":    float64(m.TotalAlloc),
-			"RandomValue":   rand.Float64(),
+	go func() {
+		for {
+			m := runtime.MemStats{}
+			runtime.ReadMemStats(&m)
+
+			s.mutex.Lock()
+			s.gauges["Alloc"] = float64(m.Alloc)
+			s.gauges["BuckHashSys"] = float64(m.BuckHashSys)
+			s.gauges["Frees"] = float64(m.Frees)
+			s.gauges["GCCPUFraction"] = m.GCCPUFraction
+			s.gauges["GCSys"] = float64(m.GCSys)
+			s.gauges["HeapAlloc"] = float64(m.HeapAlloc)
+			s.gauges["HeapIdle"] = float64(m.HeapIdle)
+			s.gauges["HeapInuse"] = float64(m.HeapInuse)
+			s.gauges["HeapObjects"] = float64(m.HeapObjects)
+			s.gauges["HeapReleased"] = float64(m.HeapReleased)
+			s.gauges["HeapSys"] = float64(m.HeapSys)
+			s.gauges["LastGC"] = float64(m.LastGC)
+			s.gauges["Lookups"] = float64(m.Lookups)
+			s.gauges["MCacheInuse"] = float64(m.MCacheInuse)
+			s.gauges["MCacheSys"] = float64(m.MCacheSys)
+			s.gauges["MSpanInuse"] = float64(m.MSpanInuse)
+			s.gauges["MSpanSys"] = float64(m.MSpanSys)
+			s.gauges["Mallocs"] = float64(m.Mallocs)
+			s.gauges["NextGC"] = float64(m.NextGC)
+			s.gauges["NumForcedGC"] = float64(m.NumForcedGC)
+			s.gauges["NumGC"] = float64(m.NumGC)
+			s.gauges["OtherSys"] = float64(m.OtherSys)
+			s.gauges["PauseTotalNs"] = float64(m.PauseTotalNs)
+			s.gauges["StackInuse"] = float64(m.StackInuse)
+			s.gauges["StackSys"] = float64(m.StackSys)
+			s.gauges["Sys"] = float64(m.Sys)
+			s.gauges["TotalAlloc"] = float64(m.TotalAlloc)
+			s.gauges["RandomValue"] = rand.Float64()
+			s.counters["PollCount"]++
+
+			s.mutex.Unlock()
+			if !polling { // однократное срабатывание при polling == false
+				return
+			}
+			pause(interval)
 		}
-		s.counters["PollCount"]++
-		s.mutex.Unlock()
-		if !polling {
-			return
+	}()
+
+	go func() {
+		for {
+			v, _ := mem.VirtualMemory()
+
+			s.mutex.Lock()
+			s.gauges["TotalMemory"] = float64(v.Total)
+			s.gauges["FreeMemory"] = float64(v.Free)
+			s.gauges["CPUutilization1"] = float64(runtime.NumCPU())
+			s.mutex.Unlock()
+
+			if !polling { // однократное срабатывание при polling == false
+				return
+			}
+			pause(interval)
 		}
-		time.Sleep(time.Second * time.Duration(interval))
-	}
+	}()
+
 }
