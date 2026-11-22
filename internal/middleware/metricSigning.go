@@ -33,23 +33,45 @@ func MetricSigningMiddleware(logger loggers.Logger, secretKey *string) echo.Midd
 		return func(c *echo.Context) error {
 			request := c.Request()
 			if request.Method == http.MethodPost {
-				signHeaderValue, err := hex.DecodeString(request.Header.Get(signatureHeader))
-				if err != nil {
-					return echo.NewHTTPError(http.StatusBadRequest, "request signature is required")
-				}
+				headerName := http.CanonicalHeaderKey(signatureHeader)
+				values, exists := request.Header[headerName]
 
-				body, err := io.ReadAll(request.Body)
-				if err != nil {
-					return echo.NewHTTPError(http.StatusBadRequest, "invalid request signature format")
-				}
+				if exists {
+					if len(values) == 0 || values[0] == "" {
+						return echo.NewHTTPError(
+							http.StatusBadRequest,
+							"invalid request signature",
+						)
+					}
 
-				h := hmac.New(sha256.New, []byte(*secretKey))
-				h.Write(body)
-				sign := h.Sum(nil)
-				if !hmac.Equal(sign, signHeaderValue) {
-					return echo.NewHTTPError(http.StatusBadRequest, "invalid request signature")
+					signHeaderValue, err := hex.DecodeString(values[0])
+					if err != nil {
+						return echo.NewHTTPError(
+							http.StatusBadRequest,
+							"invalid request signature format",
+						)
+					}
+
+					body, err := io.ReadAll(request.Body)
+					if err != nil {
+						return echo.NewHTTPError(
+							http.StatusBadRequest,
+							"request body error",
+						)
+					}
+
+					h := hmac.New(sha256.New, []byte(*secretKey))
+					h.Write(body)
+
+					if !hmac.Equal(h.Sum(nil), signHeaderValue) {
+						return echo.NewHTTPError(
+							http.StatusBadRequest,
+							"invalid request signature",
+						)
+					}
+
+					request.Body = io.NopCloser(bytes.NewReader(body))
 				}
-				request.Body = io.NopCloser(bytes.NewReader(body))
 			}
 
 			originalResponse := c.Response()
@@ -78,5 +100,6 @@ func MetricSigningMiddleware(logger loggers.Logger, secretKey *string) echo.Midd
 			}
 			return nil
 		}
+
 	}
 }
