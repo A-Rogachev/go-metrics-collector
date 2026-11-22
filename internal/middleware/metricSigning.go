@@ -32,7 +32,7 @@ func MetricSigningMiddleware(logger loggers.Logger, secretKey *string) echo.Midd
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c *echo.Context) error {
 			request := c.Request()
-			if request.Method == http.MethodPut {
+			if request.Method == http.MethodPost {
 				signHeaderValue, err := hex.DecodeString(request.Header.Get(signatureHeader))
 				if err != nil {
 					return echo.NewHTTPError(http.StatusBadRequest, "request signature is required")

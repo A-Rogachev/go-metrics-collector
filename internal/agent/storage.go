@@ -84,7 +84,7 @@ func (s *AgentStorage) SubtractCounters(ch <-chan map[string]int64) {
 	}
 }
 
-func (s *AgentStorage) Collect(polling bool, interval int) {
+func (s *AgentStorage) Collect(polling bool, interval time.Duration) {
 	var wg sync.WaitGroup
 
 	wg.Go(func() {
@@ -127,7 +127,7 @@ func (s *AgentStorage) Collect(polling bool, interval int) {
 			if !polling { // однократное срабатывание при polling == false
 				return
 			}
-			pause(time.Duration(interval))
+			pause(interval)
 		}
 	})
 
@@ -144,7 +144,7 @@ func (s *AgentStorage) Collect(polling bool, interval int) {
 			if !polling { // однократное срабатывание при polling == false
 				return
 			}
-			pause(time.Duration(interval))
+			pause(interval)
 		}
 	})
 

@@ -2,11 +2,16 @@ package main
 
 import (
 	"compress/gzip"
+	"crypto/hmac"
 	"crypto/sha256"
+	"crypto/sha512"
+	"encoding/hex"
+	"hash"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	agent "github.com/A-Rogachev/go-metrics-collector/internal/agent"
 	models "github.com/A-Rogachev/go-metrics-collector/internal/model"
@@ -15,6 +20,8 @@ import (
 )
 
 const skipTestMessage string = "=================== skipping test in short mode"
+const signatureHeader string = "HashSHA256"
+const signatureSecretKey string = "secret_key"
 
 func TestMetricStorageCollect(t *testing.T) {
 	if testing.Short() {
@@ -23,7 +30,7 @@ func TestMetricStorageCollect(t *testing.T) {
 	storage := agent.NewAgentStorage()
 	pollInterval, polling := 1, false
 
-	storage.Collect(polling, pollInterval)
+	storage.Collect(polling, time.Duration(pollInterval))
 	gaugesCount, _ := storage.GetMetricsCount()
 	counterValue, ok := storage.GetCounter("PollCount")
 
@@ -33,6 +40,9 @@ func TestMetricStorageCollect(t *testing.T) {
 }
 
 func TestMetricStorageSnapshot(t *testing.T) {
+	if testing.Short() {
+		t.Skip(skipTestMessage)
+	}
 	storage := agent.NewAgentStorage()
 	storage.SetGauge("Alloc", 123456)
 	storage.AddCounter("PollCount", int64(1))
@@ -173,6 +183,7 @@ func TestSendJSONRequests(t *testing.T) {
 
 		gzipReader, err := gzip.NewReader(r.Body)
 		assert.NoError(t, err)
+		defer r.Body.Close()
 		defer gzipReader.Close()
 
 		body, err := io.ReadAll(gzipReader)
@@ -208,4 +219,57 @@ func TestSendJSONRequests(t *testing.T) {
 	assert.JSONEq(t, expected[0], received[0])
 	assert.JSONEq(t, expected[1], received[1])
 
+}
+
+func TestSendSha256Sum(t *testing.T) {
+	if testing.Short() {
+		t.Skip(skipTestMessage)
+	}
+	secretKey := signatureSecretKey
+	tests := []struct {
+		name      string
+		algorithm func() hash.Hash
+		isValid   bool
+	}{
+		{
+			name:      "signature is valid #1",
+			algorithm: sha256.New,
+			isValid:   true,
+		},
+		{
+			name:      "algorithm doesnt fit #2",
+			algorithm: sha512.New,
+			isValid:   false,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				gzipReader, _ := gzip.NewReader(r.Body)
+				defer r.Body.Close()
+				defer gzipReader.Close()
+				signHeaderValue, _ := hex.DecodeString(r.Header.Get(signatureHeader))
+				body, _ := io.ReadAll(gzipReader)
+
+				h := hmac.New(sha256.New, []byte(secretKey))
+				h.Write(body)
+				sign := h.Sum(nil)
+
+				assert.Equal(t, hmac.Equal(sign, signHeaderValue), test.isValid, "sha256 hash sum is not valid")
+			}))
+
+			defer server.Close()
+
+			client := server.Client()
+			snapshot := models.MetricSnapshot{
+				Gauges:   map[string]float64{"Alloc": 1.23},
+				Counters: map[string]int64{"PollCount": 2},
+			}
+			logger := getLogger("info")
+			signer := agent.NewMetricSigner(&secretKey, test.algorithm)
+			sender := agent.NewJSONBatchSender(client, logger, server.URL, signer)
+			_ = sender.SendMetrics(snapshot)
+
+		})
+	}
 }

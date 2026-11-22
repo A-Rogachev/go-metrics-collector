@@ -27,7 +27,8 @@ func main() {
 	tempStorage := agent.NewAgentStorage()
 
 	periodicPolling := true
-	tempStorage.Collect(periodicPolling, cfg.PollConfig.PollInterval)
+	pollInterval := time.Duration(cfg.PollConfig.PollInterval)
+	tempStorage.Collect(periodicPolling, pollInterval)
 
 	client := &http.Client{}
 	url := "http://" + cfg.APIConfig.Address + "/updates"
@@ -45,12 +46,13 @@ func main() {
 	countersChan := make(chan map[string]int64)
 
 	var wg sync.WaitGroup
-	wg.Go(func() { tempStorage.PeriodicalSnapshot(shapshotChan, time.Duration(cfg.ReportConfig.ReportInterval)) })
+	reportInterval := time.Duration(cfg.ReportConfig.ReportInterval)
+	wg.Go(func() { tempStorage.PeriodicalSnapshot(shapshotChan, reportInterval) })
 	wg.Go(func() {
 		sender.SendMetricsPeriodically(
 			shapshotChan,
 			countersChan,
-			time.Duration(cfg.ReportConfig.ReportInterval),
+			reportInterval,
 		)
 	})
 	wg.Go(func() { tempStorage.SubtractCounters(countersChan) })

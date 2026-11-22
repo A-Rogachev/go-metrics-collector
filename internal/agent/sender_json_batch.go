@@ -162,6 +162,6 @@ func (s *JSONBatchSender) SendMetricsPeriodically(
 				countersChan <- sentCounters
 			}
 		}
-		pause(time.Second * period)
+		pause(period)
 	}
 }
