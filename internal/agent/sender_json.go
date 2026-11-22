@@ -33,7 +33,7 @@ func NewJSONSender(
 	}
 }
 
-func (s *JSONSender) SendMetrics(snapshot models.MetricSnapshot) map[string]int64 {
+func (s *JSONSender) SendMetrics(snapshot models.MetricSnapshot, poolSize int) map[string]int64 {
 	sentCounters := make(map[string]int64, 0)
 	for key, value := range snapshot.Gauges {
 		reqBody := models.Metric{

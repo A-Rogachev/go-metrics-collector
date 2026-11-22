@@ -73,7 +73,7 @@ func TestSendRequests(t *testing.T) {
 	logger := getLogger("info")
 	signer := agent.NewMetricSigner(nil, sha256.New)
 	sender := agent.NewQueryParamsSender(client, logger, server.URL+"/update", signer)
-	_ = sender.SendMetrics(snapshot)
+	_ = sender.SendMetrics(snapshot, 1)
 
 	assert.ElementsMatch(t, []string{
 		"/update/gauge/Alloc/1.230000",
@@ -214,7 +214,7 @@ func TestSendJSONRequests(t *testing.T) {
 	logger := getLogger("info")
 	signer := agent.NewMetricSigner(nil, sha256.New)
 	sender := agent.NewJSONSender(client, logger, server.URL, signer)
-	_ = sender.SendMetrics(snapshot)
+	_ = sender.SendMetrics(snapshot, 1)
 
 	assert.JSONEq(t, expected[0], received[0])
 	assert.JSONEq(t, expected[1], received[1])
@@ -268,7 +268,7 @@ func TestSendSha256Sum(t *testing.T) {
 			logger := getLogger("info")
 			signer := agent.NewMetricSigner(&secretKey, test.algorithm)
 			sender := agent.NewJSONBatchSender(client, logger, server.URL, signer)
-			_ = sender.SendMetrics(snapshot)
+			_ = sender.SendMetrics(snapshot, 1)
 
 		})
 	}

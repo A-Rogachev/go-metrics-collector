@@ -8,18 +8,20 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"sync"
 	"time"
 
 	models "github.com/A-Rogachev/go-metrics-collector/internal/model"
 )
 
-const BatchSize = 50
+const BatchSize = 10
 
 type JSONBatchSender struct {
-	client *http.Client
-	logger *slog.Logger
-	URL    string
-	signer Signer
+	client    *http.Client
+	logger    *slog.Logger
+	URL       string
+	signer    Signer
+	batchSize int
 }
 
 func NewJSONBatchSender(
@@ -29,82 +31,127 @@ func NewJSONBatchSender(
 	signer Signer,
 ) *JSONBatchSender {
 	return &JSONBatchSender{
-		client: client,
-		logger: logger,
-		URL:    baseURL + "/",
-		signer: signer,
+		client:    client,
+		logger:    logger,
+		URL:       baseURL + "/",
+		signer:    signer,
+		batchSize: BatchSize,
 	}
 }
 
-func (s *JSONBatchSender) SendMetrics(snapshot models.MetricSnapshot) map[string]int64 {
-	sentCounters := make(map[string]int64, 0)
+func (s *JSONBatchSender) prepareMetrics(snapshot models.MetricSnapshot) []models.Metric {
 	var metricsToSend []models.Metric
-	for key, value := range snapshot.Gauges {
+	for k, v := range snapshot.Gauges {
 		metricsToSend = append(
 			metricsToSend,
-			models.Metric{
-				ID:    key,
-				MType: models.Gauge,
-				Value: &value,
-			},
+			models.Metric{ID: k, MType: models.Gauge, Value: &v},
 		)
 	}
-	for key, value := range snapshot.Counters {
+	for k, v := range snapshot.Counters {
 		metricsToSend = append(
 			metricsToSend,
-			models.Metric{
-				ID:    key,
-				MType: models.Counter,
-				Delta: &value,
-			},
+			models.Metric{ID: k, MType: models.Counter, Delta: &v},
 		)
-		sentCounters[key] = value
 	}
-	if len(metricsToSend) > 0 {
-		err := s.sendBatches(metricsToSend)
-		if err != nil {
-			s.logger.Debug(err.Error())
-			return make(map[string]int64, 0)
-		} else {
-			s.logger.Info("Metrics sent to the server")
-			return sentCounters
+	return metricsToSend
+}
+
+func (s *JSONBatchSender) SendMetrics(
+	snapshot models.MetricSnapshot,
+	poolSize int,
+) map[string]int64 {
+	sentCounters := make(map[string]int64, 0)
+	metricsToSend := s.prepareMetrics(snapshot)
+	if len(metricsToSend) == 0 {
+		s.logger.Info("No metrics to send")
+		return sentCounters
+	}
+	sentCounters = s.sendMetricsWithPool(metricsToSend, poolSize)
+	return sentCounters
+
+}
+
+func (s *JSONBatchSender) sendMetricsWithPool(
+	metrics []models.Metric,
+	poolSize int,
+) map[string]int64 {
+	sentCounters := make(map[string]int64, 0)
+	batchCh := make(chan []models.Metric)
+	resultCh := make(chan map[string]int64)
+
+	var workers sync.WaitGroup
+
+	for i := 0; i < poolSize; i++ {
+		workerID := i
+		workers.Add(1)
+		go func() {
+			defer workers.Done()
+			s.worker(batchCh, resultCh, workerID)
+		}()
+	}
+	go s.splitMetrics(metrics, batchCh)
+	go func() {
+		workers.Wait()
+		close(resultCh)
+	}()
+
+	for counters := range resultCh {
+		for k, v := range counters {
+			sentCounters[k] += v
 		}
 	}
-	s.logger.Info("No metrics to send")
 	return sentCounters
 }
 
-func (s *JSONBatchSender) sendBatches(metrics []models.Metric) error {
-	for start := 0; start < len(metrics); start += BatchSize {
-		end := start + BatchSize
-		if end > len(metrics) {
-			end = len(metrics)
-		}
-		if err := s.sendJSONMetricBatch(metrics[start:end]); err != nil {
-			return err
-		}
+func (s *JSONBatchSender) worker(
+	chIn <-chan []models.Metric,
+	chOut chan<- map[string]int64,
+	workerID int,
+) {
+	for metrics := range chIn {
+		sentCounters := s.sendOneBatch(metrics, workerID)
+		chOut <- sentCounters
 	}
-	return nil
 }
 
-func (s *JSONBatchSender) sendJSONMetricBatch(metrics []models.Metric) error {
+// разбивает метрики по батчам для параллельной отправки воркерами
+func (s *JSONBatchSender) splitMetrics(
+	data []models.Metric,
+	ch chan<- []models.Metric,
+) {
+	defer close(ch)
+	for start := 0; start < len(data); start += s.batchSize {
+		end := start + s.batchSize
+		if end > len(data) {
+			end = len(data)
+		}
+		ch <- data[start:end]
+	}
+}
+
+func (s *JSONBatchSender) sendOneBatch(metrics []models.Metric, workerID int) map[string]int64 {
+	sentCounters := make(map[string]int64)
 	jsonBody, err := json.Marshal(metrics)
 	if err != nil {
-		return err
+		s.logger.Debug(err.Error())
+		return sentCounters
 	}
 
 	var compressedBody bytes.Buffer
 	gzipWriter := gzip.NewWriter(&compressedBody)
 	if _, err := gzipWriter.Write(jsonBody); err != nil {
-		return err
+		s.logger.Debug(err.Error())
+		return sentCounters
 	}
 	if err := gzipWriter.Close(); err != nil {
-		return err
+		s.logger.Debug(err.Error())
+		return sentCounters
 	}
 
 	request, err := http.NewRequest(http.MethodPost, s.URL, &compressedBody)
 	if err != nil {
-		return err
+		s.logger.Debug(err.Error())
+		return sentCounters
 	}
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("Content-Encoding", "gzip")
@@ -116,51 +163,44 @@ func (s *JSONBatchSender) sendJSONMetricBatch(metrics []models.Metric) error {
 
 	response, err := s.client.Do(request)
 	if err != nil {
-		return err
+		s.logger.Debug(err.Error())
+		return sentCounters
 	}
 	defer response.Body.Close()
 
 	if response.StatusCode != http.StatusOK {
-		return fmt.Errorf("unexpected status: %d", response.StatusCode)
+		err = fmt.Errorf("unexpected status: %d", response.StatusCode)
+		s.logger.Debug(err.Error())
+		return sentCounters
 	}
 	_, err = io.Copy(io.Discard, response.Body)
 	if err != nil {
-		return err
+		s.logger.Debug(err.Error())
+		return sentCounters
 	}
-	return nil
+	s.logger.Info(fmt.Sprintf("Metrics sent to the server (worker %d)", workerID+1))
+
+	// в случае успешного запроса возвращается мапа с переданными счетчиками
+	for _, m := range metrics {
+		if m.MType == models.Counter {
+			sentCounters[m.ID] = *m.Delta
+		}
+	}
+	return sentCounters
 }
 
 func (s *JSONBatchSender) SendMetricsPeriodically(
 	shapshotChan <-chan models.MetricSnapshot,
 	countersChan chan<- map[string]int64,
 	period time.Duration,
+	poolSize int,
 ) {
 	for {
 		metrics := <-shapshotChan
-		sentCounters := make(map[string]int64, 0)
-		var metricsToSend []models.Metric
-		for key, value := range metrics.Gauges {
-			metricsToSend = append(
-				metricsToSend,
-				models.Metric{ID: key, MType: models.Gauge, Value: &value},
-			)
-		}
-		for key, value := range metrics.Counters {
-			metricsToSend = append(
-				metricsToSend,
-				models.Metric{ID: key, MType: models.Counter, Delta: &value},
-			)
-			sentCounters[key] = value
-		}
+		metricsToSend := s.prepareMetrics(metrics)
 		if len(metricsToSend) > 0 {
-			err := s.sendBatches(metricsToSend)
-			if err != nil {
-				s.logger.Debug(err.Error())
-				countersChan <- make(map[string]int64, 0)
-			} else {
-				s.logger.Info("Metrics sent to the server")
-				countersChan <- sentCounters
-			}
+			sentCounters := s.sendMetricsWithPool(metricsToSend, poolSize)
+			countersChan <- sentCounters
 		}
 		pause(period)
 	}
