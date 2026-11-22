@@ -35,16 +35,12 @@ func MetricSigningMiddleware(logger loggers.Logger, secretKey *string) echo.Midd
 			if request.Method == http.MethodPost {
 				headerName := http.CanonicalHeaderKey(signatureHeader)
 				values, exists := request.Header[headerName]
-
 				if exists {
-					if len(values) == 0 || values[0] == "" {
-						return echo.NewHTTPError(
-							http.StatusBadRequest,
-							"invalid request signature",
-						)
+					var signature string
+					if len(values) > 0 {
+						signature = values[0]
 					}
-
-					signHeaderValue, err := hex.DecodeString(values[0])
+					signHeaderValue, err := hex.DecodeString(signature)
 					if err != nil {
 						return echo.NewHTTPError(
 							http.StatusBadRequest,
