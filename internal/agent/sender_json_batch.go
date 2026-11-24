@@ -76,8 +76,8 @@ func (s *JSONBatchSender) sendMetricsWithPool(
 	poolSize int,
 ) map[string]int64 {
 	sentCounters := make(map[string]int64, 0)
-	batchCh := make(chan []models.Metric)
-	resultCh := make(chan map[string]int64)
+	batchCh := make(chan []models.Metric, poolSize)
+	resultCh := make(chan map[string]int64, poolSize)
 
 	var workers sync.WaitGroup
 
