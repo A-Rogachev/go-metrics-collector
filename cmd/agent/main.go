@@ -42,7 +42,6 @@ func main() {
 
 	shapshotChan := make(chan models.MetricSnapshot)
 	countersChan := make(chan map[string]int64)
-	limitRate := int(3)
 
 	var wg sync.WaitGroup
 	reportInterval := time.Duration(cfg.ReportConfig.ReportInterval)
@@ -52,7 +51,7 @@ func main() {
 			shapshotChan,
 			countersChan,
 			reportInterval,
-			limitRate,
+			cfg.RateLimit,
 		)
 	})
 	wg.Go(func() { tempStorage.SubtractCounters(countersChan) })

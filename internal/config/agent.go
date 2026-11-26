@@ -45,7 +45,7 @@ func GetAgentConfig() AgentConfig {
 	flag.IntVar(&cfg.ReportConfig.ReportInterval, "r", 10, "how often send metrics via api")
 	flag.IntVar(&cfg.PollConfig.PollInterval, "p", 2, "how often get metrics via runtime package")
 	flag.StringVar(&cfg.secretKeyRaw, "k", "", "key for metrics hash check")
-	flag.IntVar(&cfg.ReportConfig.RateLimit, "l", 10, "send requests limit")
+	flag.IntVar(&cfg.ReportConfig.RateLimit, "l", 3, "send requests limit")
 	flag.Parse()
 
 	address, exists := os.LookupEnv("ADDRESS")

@@ -17,8 +17,7 @@ import (
 )
 
 func main() {
-
-	cfg, cfgDB := config.GetServerConfig(), config.GetDatabaseConfig()
+	cfg, cfgDB := config.GetServerConfigs()
 	log := middleware.ZerologAdapter{Logger: getLogger(cfg.LogLevel)}
 
 	memoryStorage := storage.NewMemStorage()
