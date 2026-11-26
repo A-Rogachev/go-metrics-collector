@@ -37,10 +37,7 @@ func main() {
 		client,
 		logger,
 		url,
-		agent.NewMetricSigner(
-			config.ConfigParamStringCounter("KEY", "k"),
-			sha256.New,
-		),
+		agent.NewMetricSigner(cfg.SecretKey, sha256.New),
 	)
 
 	shapshotChan := make(chan models.MetricSnapshot)

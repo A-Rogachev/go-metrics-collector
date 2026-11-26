@@ -33,7 +33,8 @@ type AgentConfig struct {
 	PollConfig
 	ReportConfig
 	Additional
-	SecretKey string `env:"KEY"`
+	SecretKey    *string
+	secretKeyRaw string `env:"KEY"`
 }
 
 func GetAgentConfig() AgentConfig {
@@ -43,7 +44,7 @@ func GetAgentConfig() AgentConfig {
 	flag.StringVar(&cfg.APIConfig.Address, "a", "localhost:8080", "api address and port")
 	flag.IntVar(&cfg.ReportConfig.ReportInterval, "r", 10, "how often send metrics via api")
 	flag.IntVar(&cfg.PollConfig.PollInterval, "p", 2, "how often get metrics via runtime package")
-	flag.StringVar(&cfg.SecretKey, "k", "", "key for metrics hash check")
+	flag.StringVar(&cfg.secretKeyRaw, "k", "", "key for metrics hash check")
 	flag.IntVar(&cfg.ReportConfig.RateLimit, "l", 10, "send requests limit")
 	flag.Parse()
 
@@ -68,7 +69,10 @@ func GetAgentConfig() AgentConfig {
 
 	key, exists := os.LookupEnv("KEY")
 	if exists {
-		cfg.SecretKey = key
+		cfg.secretKeyRaw = key
+	}
+	if cfg.secretKeyRaw != "" {
+		cfg.SecretKey = &cfg.secretKeyRaw
 	}
 
 	rateLimit, exists := os.LookupEnv("RATE_LIMIT")
