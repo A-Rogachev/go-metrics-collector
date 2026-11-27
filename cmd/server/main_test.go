@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -16,11 +17,11 @@ import (
 
 	"github.com/go-playground/validator/v10"
 
-	"github.com/A-Rogachev/go-metrics-collector/internal/agent"
 	handlers "github.com/A-Rogachev/go-metrics-collector/internal/handler"
 	"github.com/A-Rogachev/go-metrics-collector/internal/middleware"
 	models "github.com/A-Rogachev/go-metrics-collector/internal/model"
 	services "github.com/A-Rogachev/go-metrics-collector/internal/service"
+	"github.com/A-Rogachev/go-metrics-collector/internal/signing"
 
 	int_storage "github.com/A-Rogachev/go-metrics-collector/internal/storage"
 	"github.com/labstack/echo/v5"
@@ -661,11 +662,8 @@ func TestBatchMetricUpdate(t *testing.T) {
 }
 
 func generate256Sum(key string, body []byte) string {
-	signer := agent.NewMetricSigner(
-		&key,
-		sha256.New,
-	)
-	value, _ := signer.SignMetric(body)
+	signer := signing.NewHMACSigner(&key, sha256.New, base64.StdEncoding)
+	value, _ := signer.Sign(body)
 	return value
 
 }
@@ -710,7 +708,10 @@ func TestServerSha256Response(t *testing.T) {
 	e, secretKey := echo.New(), signatureSecretKey
 
 	e.Validator = &handlers.MetricValidator{Validator: validator.New()}
-	e.Use(middleware.MetricSigningMiddleware(appLogger, &secretKey))
+	e.Use(middleware.MetricSigningMiddleware(
+		appLogger,
+		signing.NewHMACSigner(&secretKey, sha256.New, base64.StdEncoding),
+	))
 
 	e.POST("update/", func(c *echo.Context) error {
 		return handlers.UpdateMetricJSON(c, storage, saver, appLogger)

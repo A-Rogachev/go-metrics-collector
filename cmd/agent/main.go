@@ -2,6 +2,7 @@ package main
 
 import (
 	"crypto/sha256"
+	"encoding/base64"
 	"net/http"
 	"sync"
 	"time"
@@ -9,6 +10,7 @@ import (
 	"github.com/A-Rogachev/go-metrics-collector/internal/agent"
 	"github.com/A-Rogachev/go-metrics-collector/internal/config"
 	models "github.com/A-Rogachev/go-metrics-collector/internal/model"
+	"github.com/A-Rogachev/go-metrics-collector/internal/signing"
 )
 
 type MetricSender interface {
@@ -36,7 +38,11 @@ func main() {
 		client,
 		logger,
 		url,
-		agent.NewMetricSigner(cfg.SecretKey, sha256.New),
+		signing.NewHMACSigner(
+			cfg.SecretKey,
+			sha256.New,
+			base64.StdEncoding,
+		),
 	)
 
 	shapshotChan := make(chan models.MetricSnapshot)

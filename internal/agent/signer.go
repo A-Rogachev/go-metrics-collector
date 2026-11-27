@@ -1,5 +1,5 @@
 package agent
 
 type Signer interface {
-	SignMetric([]byte) (string, error)
+	Sign([]byte) (string, error)
 }

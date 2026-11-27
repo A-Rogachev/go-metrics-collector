@@ -1,6 +1,8 @@
 package main
 
 import (
+	"crypto/sha256"
+	"encoding/base64"
 	"fmt"
 	"time"
 
@@ -9,6 +11,7 @@ import (
 	"github.com/A-Rogachev/go-metrics-collector/internal/middleware"
 	repositories "github.com/A-Rogachev/go-metrics-collector/internal/repository"
 	services "github.com/A-Rogachev/go-metrics-collector/internal/service"
+	"github.com/A-Rogachev/go-metrics-collector/internal/signing"
 	"github.com/A-Rogachev/go-metrics-collector/internal/storage"
 	"github.com/A-Rogachev/go-metrics-collector/migrations"
 
@@ -63,7 +66,10 @@ func main() {
 	e.Use(middleware.GetLoggingMiddleware(log))
 	e.Use(middleware.GzipRequestMiddleware(log))
 	if cfg.SecretKey != nil {
-		e.Use(middleware.MetricSigningMiddleware(log, cfg.SecretKey))
+		e.Use(middleware.MetricSigningMiddleware(
+			log,
+			signing.NewHMACSigner(cfg.SecretKey, sha256.New, base64.StdEncoding),
+		))
 	}
 	e.Use(middleware.GzipResponseMiddleware)
 

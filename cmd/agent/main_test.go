@@ -2,7 +2,6 @@ package main
 
 import (
 	"compress/gzip"
-	"crypto/hmac"
 	"crypto/sha256"
 	"crypto/sha512"
 	"encoding/base64"
@@ -15,7 +14,7 @@ import (
 
 	agent "github.com/A-Rogachev/go-metrics-collector/internal/agent"
 	models "github.com/A-Rogachev/go-metrics-collector/internal/model"
-
+	"github.com/A-Rogachev/go-metrics-collector/internal/signing"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -71,7 +70,7 @@ func TestSendRequests(t *testing.T) {
 	}
 
 	logger := getLogger("info")
-	signer := agent.NewMetricSigner(nil, sha256.New)
+	signer := signing.NewHMACSigner(nil, sha256.New, base64.StdEncoding)
 	sender := agent.NewQueryParamsSender(client, logger, server.URL+"/update", signer)
 	_ = sender.SendMetrics(snapshot, 1)
 
@@ -114,7 +113,8 @@ func TestSendMetric(t *testing.T) {
 
 			client := server.Client()
 			logger := getLogger("info")
-			signer := agent.NewMetricSigner(nil, sha256.New)
+			signer := signing.NewHMACSigner(nil, sha256.New, base64.StdEncoding)
+
 			sender := agent.NewQueryParamsSender(client, logger, server.URL+"/update/gauge/1/2", signer)
 			err := sender.SendMetric(sender.URL + "/update/gauge/1/2")
 
@@ -163,7 +163,7 @@ func TestSendJSONMetric(t *testing.T) {
 
 			client := server.Client()
 			logger := getLogger("info")
-			signer := agent.NewMetricSigner(nil, sha256.New)
+			signer := signing.NewHMACSigner(nil, sha256.New, base64.StdEncoding)
 			sender := agent.NewJSONSender(client, logger, server.URL, signer)
 			err := sender.SendJSONMetric(test.requestBody)
 
@@ -212,7 +212,7 @@ func TestSendJSONRequests(t *testing.T) {
 		`{"id":"PollCount","type":"counter","delta":2}`,
 	}
 	logger := getLogger("info")
-	signer := agent.NewMetricSigner(nil, sha256.New)
+	signer := signing.NewHMACSigner(nil, sha256.New, base64.StdEncoding)
 	sender := agent.NewJSONSender(client, logger, server.URL, signer)
 	_ = sender.SendMetrics(snapshot, 1)
 
@@ -242,20 +242,31 @@ func TestSendSha256Sum(t *testing.T) {
 			isValid:   false,
 		},
 	}
+	agentSigner := signing.NewHMACSigner(
+		&secretKey,
+		sha256.New,
+		base64.StdEncoding,
+	)
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				gzipReader, _ := gzip.NewReader(r.Body)
 				defer r.Body.Close()
 				defer gzipReader.Close()
-				signHeaderValue, _ := base64.StdEncoding.DecodeString(r.Header.Get(signatureHeader))
+				serverSigner := signing.NewHMACSigner(
+					&secretKey,
+					test.algorithm,
+					base64.StdEncoding,
+				)
+
 				body, _ := io.ReadAll(gzipReader)
 
-				h := hmac.New(sha256.New, []byte(secretKey))
-				h.Write(body)
-				sign := h.Sum(nil)
-
-				assert.Equal(t, hmac.Equal(sign, signHeaderValue), test.isValid, "sha256 hash sum is not valid")
+				assert.Equal(
+					t,
+					serverSigner.Verify(body, r.Header.Get(signatureHeader)),
+					test.isValid,
+					"sha256 hash sum is not valid",
+				)
 			}))
 
 			defer server.Close()
@@ -266,8 +277,7 @@ func TestSendSha256Sum(t *testing.T) {
 				Counters: map[string]int64{"PollCount": 2},
 			}
 			logger := getLogger("info")
-			signer := agent.NewMetricSigner(&secretKey, test.algorithm)
-			sender := agent.NewJSONBatchSender(client, logger, server.URL, signer)
+			sender := agent.NewJSONBatchSender(client, logger, server.URL, agentSigner)
 			_ = sender.SendMetrics(snapshot, 1)
 
 		})

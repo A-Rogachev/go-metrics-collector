@@ -155,7 +155,7 @@ func (s *JSONBatchSender) sendOneBatch(metrics []models.Metric, workerID int) ma
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("Content-Encoding", "gzip")
 
-	metricSign, err := s.signer.SignMetric(jsonBody)
+	metricSign, err := s.signer.Sign(jsonBody)
 	if err == nil {
 		request.Header.Set("HashSHA256", metricSign)
 	}

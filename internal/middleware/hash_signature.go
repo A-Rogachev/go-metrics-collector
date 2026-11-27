@@ -2,9 +2,6 @@ package middleware
 
 import (
 	"bytes"
-	"crypto/hmac"
-	"crypto/sha256"
-	"encoding/base64"
 	"io"
 	"net/http"
 
@@ -13,6 +10,11 @@ import (
 )
 
 const signatureHeader string = "HashSHA256"
+
+type Signer interface {
+	Sign([]byte) (string, error)
+	Verify(data []byte, signature string) bool
+}
 
 type responseBuffer struct {
 	http.ResponseWriter
@@ -28,7 +30,10 @@ func (w *responseBuffer) Write(data []byte) (int, error) {
 	return w.body.Write(data)
 }
 
-func MetricSigningMiddleware(logger loggers.Logger, secretKey *string) echo.MiddlewareFunc {
+func MetricSigningMiddleware(
+	logger loggers.Logger,
+	signer Signer,
+) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c *echo.Context) error {
 			request := c.Request()
@@ -40,14 +45,6 @@ func MetricSigningMiddleware(logger loggers.Logger, secretKey *string) echo.Midd
 					if len(values) > 0 {
 						signature = values[0]
 					}
-					signHeaderValue, err := base64.StdEncoding.DecodeString(signature)
-					if err != nil {
-						return echo.NewHTTPError(
-							http.StatusBadRequest,
-							"invalid request signature format",
-						)
-					}
-
 					body, err := io.ReadAll(request.Body)
 					if err != nil {
 						return echo.NewHTTPError(
@@ -55,17 +52,12 @@ func MetricSigningMiddleware(logger loggers.Logger, secretKey *string) echo.Midd
 							"request body error",
 						)
 					}
-
-					h := hmac.New(sha256.New, []byte(*secretKey))
-					h.Write(body)
-
-					if !hmac.Equal(h.Sum(nil), signHeaderValue) {
+					if !signer.Verify(body, signature) {
 						return echo.NewHTTPError(
 							http.StatusBadRequest,
 							"invalid request signature",
 						)
 					}
-
 					request.Body = io.NopCloser(bytes.NewReader(body))
 				}
 			}
@@ -83,10 +75,7 @@ func MetricSigningMiddleware(logger loggers.Logger, secretKey *string) echo.Midd
 				return err
 			}
 
-			hmacResp := hmac.New(sha256.New, []byte(*secretKey))
-			hmacResp.Write(buffered.body.Bytes())
-			signature := base64.StdEncoding.EncodeToString(hmacResp.Sum(nil))
-
+			signature, _ := signer.Sign(buffered.body.Bytes())
 			buffered.Header().Set(signatureHeader, signature)
 			c.SetResponse(originalResponse)
 			originalResponse.WriteHeader(buffered.status)
