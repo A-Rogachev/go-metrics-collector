@@ -16,7 +16,6 @@ type MetricSender interface {
 	SendMetricsPeriodically(
 		<-chan models.MetricSnapshot,
 		chan<- map[string]int64,
-		time.Duration,
 		int,
 	)
 }
@@ -28,7 +27,7 @@ func main() {
 	tempStorage := agent.NewAgentStorage()
 
 	periodicPolling := true
-	pollInterval := time.Duration(cfg.PollConfig.PollInterval)
+	pollInterval := time.Duration(cfg.PollConfig.PollInterval) * time.Second
 	tempStorage.Collect(periodicPolling, pollInterval)
 
 	client := &http.Client{}
@@ -44,13 +43,12 @@ func main() {
 	countersChan := make(chan map[string]int64)
 
 	var wg sync.WaitGroup
-	reportInterval := time.Duration(cfg.ReportConfig.ReportInterval)
+	reportInterval := time.Duration(cfg.ReportConfig.ReportInterval) * time.Second
 	wg.Go(func() { tempStorage.PeriodicalSnapshot(shapshotChan, reportInterval) })
 	wg.Go(func() {
 		sender.SendMetricsPeriodically(
 			shapshotChan,
 			countersChan,
-			reportInterval,
 			cfg.RateLimit,
 		)
 	})

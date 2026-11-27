@@ -12,7 +12,7 @@ import (
 )
 
 func pause(interval time.Duration) {
-	time.Sleep(time.Second * interval)
+	time.Sleep(interval)
 }
 
 type AgentStorage struct {

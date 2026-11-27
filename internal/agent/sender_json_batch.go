@@ -9,7 +9,6 @@ import (
 	"log/slog"
 	"net/http"
 	"sync"
-	"time"
 
 	models "github.com/A-Rogachev/go-metrics-collector/internal/model"
 )
@@ -192,7 +191,6 @@ func (s *JSONBatchSender) sendOneBatch(metrics []models.Metric, workerID int) ma
 func (s *JSONBatchSender) SendMetricsPeriodically(
 	shapshotChan <-chan models.MetricSnapshot,
 	countersChan chan<- map[string]int64,
-	period time.Duration,
 	poolSize int,
 ) {
 	for {
@@ -202,6 +200,5 @@ func (s *JSONBatchSender) SendMetricsPeriodically(
 			sentCounters := s.sendMetricsWithPool(metricsToSend, poolSize)
 			countersChan <- sentCounters
 		}
-		pause(period)
 	}
 }
