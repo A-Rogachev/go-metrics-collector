@@ -725,7 +725,7 @@ func TestServerSha256Response(t *testing.T) {
 			request.Header.Set(signatureHeader, generate256Sum(secretKey, body))
 
 			e.ServeHTTP(w, request)
-			header := e.AcquireContext().Response().Header()
+			header := w.Header()
 			respBody := w.Body.Bytes()
 			respShaSum := generate256Sum(secretKey, respBody)
 

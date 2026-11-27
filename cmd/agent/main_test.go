@@ -5,7 +5,7 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"crypto/sha512"
-	"encoding/hex"
+	"encoding/base64"
 	"hash"
 	"io"
 	"net/http"
@@ -248,7 +248,7 @@ func TestSendSha256Sum(t *testing.T) {
 				gzipReader, _ := gzip.NewReader(r.Body)
 				defer r.Body.Close()
 				defer gzipReader.Close()
-				signHeaderValue, _ := hex.DecodeString(r.Header.Get(signatureHeader))
+				signHeaderValue, _ := base64.StdEncoding.DecodeString(r.Header.Get(signatureHeader))
 				body, _ := io.ReadAll(gzipReader)
 
 				h := hmac.New(sha256.New, []byte(secretKey))

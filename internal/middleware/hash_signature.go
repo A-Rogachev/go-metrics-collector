@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"crypto/hmac"
 	"crypto/sha256"
-	"encoding/hex"
+	"encoding/base64"
 	"io"
 	"net/http"
 
@@ -40,7 +40,7 @@ func MetricSigningMiddleware(logger loggers.Logger, secretKey *string) echo.Midd
 					if len(values) > 0 {
 						signature = values[0]
 					}
-					signHeaderValue, err := hex.DecodeString(signature)
+					signHeaderValue, err := base64.StdEncoding.DecodeString(signature)
 					if err != nil {
 						return echo.NewHTTPError(
 							http.StatusBadRequest,
@@ -85,7 +85,7 @@ func MetricSigningMiddleware(logger loggers.Logger, secretKey *string) echo.Midd
 
 			hmacResp := hmac.New(sha256.New, []byte(*secretKey))
 			hmacResp.Write(buffered.body.Bytes())
-			signature := hex.EncodeToString(hmacResp.Sum(nil))
+			signature := base64.StdEncoding.EncodeToString(hmacResp.Sum(nil))
 
 			buffered.Header().Set(signatureHeader, signature)
 			c.SetResponse(originalResponse)

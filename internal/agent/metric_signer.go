@@ -2,7 +2,7 @@ package agent
 
 import (
 	"crypto/hmac"
-	"encoding/hex"
+	"encoding/base64"
 	"errors"
 	"hash"
 )
@@ -29,5 +29,5 @@ func (m *MetricSigner) SignMetric(value []byte) (string, error) {
 	h.Write(value)
 	dst := h.Sum(nil)
 
-	return hex.EncodeToString(dst), nil
+	return base64.StdEncoding.EncodeToString(dst), nil
 }
