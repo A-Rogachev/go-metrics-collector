@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"fmt"
 	"maps"
 	"math/rand/v2"
 	"runtime"
@@ -8,6 +9,7 @@ import (
 	"time"
 
 	models "github.com/A-Rogachev/go-metrics-collector/internal/model"
+	"github.com/shirou/gopsutil/v4/cpu"
 	"github.com/shirou/gopsutil/v4/mem"
 )
 
@@ -133,12 +135,16 @@ func (s *AgentStorage) Collect(polling bool, interval time.Duration) {
 
 	wg.Go(func() {
 		for {
-			v, _ := mem.VirtualMemory()
+			vm, _ := mem.VirtualMemory()
+			cp, _ := cpu.Percent(0, true)
 
 			s.mutex.Lock()
-			s.gauges["TotalMemory"] = float64(v.Total)
-			s.gauges["FreeMemory"] = float64(v.Free)
-			s.gauges["CPUutilization1"] = float64(runtime.NumCPU())
+			s.gauges["TotalMemory"] = float64(vm.Total)
+			s.gauges["FreeMemory"] = float64(vm.Free)
+			for i, c := range cp {
+				metricName := fmt.Sprintf("CPUutilization%d", i+1)
+				s.gauges[metricName] = float64(c)
+			}
 			s.mutex.Unlock()
 
 			if !polling { // однократное срабатывание при polling == false
