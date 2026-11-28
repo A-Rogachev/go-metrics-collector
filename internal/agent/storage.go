@@ -1,7 +1,9 @@
 package agent
 
 import (
+	"context"
 	"fmt"
+	"log/slog"
 	"maps"
 	"math/rand/v2"
 	"runtime"
@@ -12,10 +14,6 @@ import (
 	"github.com/shirou/gopsutil/v4/cpu"
 	"github.com/shirou/gopsutil/v4/mem"
 )
-
-func pause(interval time.Duration) {
-	time.Sleep(interval)
-}
 
 type AgentStorage struct {
 	mutex    sync.Mutex
@@ -72,21 +70,35 @@ func (s *AgentStorage) Snapshot() models.MetricSnapshot {
 	return models.MetricSnapshot{Gauges: gauges, Counters: counters}
 }
 
-func (s *AgentStorage) SubtractCounters(ch <-chan map[string]int64) {
+func (s *AgentStorage) SubtractCounters(
+	ctx context.Context,
+	ch <-chan map[string]int64,
+	logger *slog.Logger,
+) {
 	for {
-		sentCounters := <-ch
-		s.mutex.Lock()
-		for key, value := range sentCounters {
-			s.counters[key] -= value
-			if s.counters[key] < 0 {
-				s.counters[key] = 0
+		select {
+		case <-ctx.Done():
+			logger.Info("subtraction counters stopped")
+			return
+		case sentCounters := <-ch:
+			s.mutex.Lock()
+			for key, value := range sentCounters {
+				s.counters[key] -= value
+				if s.counters[key] < 0 {
+					s.counters[key] = 0
+				}
 			}
+			s.mutex.Unlock()
 		}
-		s.mutex.Unlock()
 	}
 }
 
-func (s *AgentStorage) Collect(polling bool, interval time.Duration) {
+func (s *AgentStorage) Collect(
+	ctx context.Context,
+	polling bool,
+	interval time.Duration,
+	logger *slog.Logger,
+) {
 	var wg sync.WaitGroup
 
 	wg.Go(func() {
@@ -129,7 +141,12 @@ func (s *AgentStorage) Collect(polling bool, interval time.Duration) {
 			if !polling { // однократное срабатывание при polling == false
 				return
 			}
-			pause(interval)
+			select {
+			case <-ctx.Done():
+				logger.Info("collecting from runtime stopped")
+				return
+			case <-time.After(interval):
+			}
 		}
 	})
 
@@ -150,7 +167,12 @@ func (s *AgentStorage) Collect(polling bool, interval time.Duration) {
 			if !polling { // однократное срабатывание при polling == false
 				return
 			}
-			pause(interval)
+			select {
+			case <-ctx.Done():
+				logger.Info("collecting from gopsutil stopped")
+				return
+			case <-time.After(interval):
+			}
 		}
 	})
 
@@ -160,8 +182,10 @@ func (s *AgentStorage) Collect(polling bool, interval time.Duration) {
 }
 
 func (s *AgentStorage) PeriodicalSnapshot(
+	ctx context.Context,
 	ch chan models.MetricSnapshot,
 	period time.Duration,
+	logger *slog.Logger,
 ) {
 	for {
 		s.mutex.Lock()
@@ -170,6 +194,12 @@ func (s *AgentStorage) PeriodicalSnapshot(
 
 		ch <- models.MetricSnapshot{Gauges: gauges, Counters: counters}
 
-		pause(period)
+		select {
+		case <-ctx.Done():
+			logger.Info("periodical snapshot stopped")
+			return
+		case <-time.After(period):
+		}
 	}
+
 }

@@ -3,6 +3,7 @@ package agent
 import (
 	"bytes"
 	"compress/gzip"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -189,16 +190,23 @@ func (s *JSONBatchSender) sendOneBatch(metrics []models.Metric, workerID int) ma
 }
 
 func (s *JSONBatchSender) SendMetricsPeriodically(
+	ctx context.Context,
 	shapshotChan <-chan models.MetricSnapshot,
 	countersChan chan<- map[string]int64,
 	poolSize int,
+	logger *slog.Logger,
 ) {
 	for {
-		metrics := <-shapshotChan
-		metricsToSend := s.prepareMetrics(metrics)
-		if len(metricsToSend) > 0 {
-			sentCounters := s.sendMetricsWithPool(metricsToSend, poolSize)
-			countersChan <- sentCounters
+		select {
+		case <-ctx.Done():
+			logger.Info("- - - sending metrics stopped")
+			return
+		case metrics := <-shapshotChan:
+			metricsToSend := s.prepareMetrics(metrics)
+			if len(metricsToSend) > 0 {
+				sentCounters := s.sendMetricsWithPool(metricsToSend, poolSize)
+				countersChan <- sentCounters
+			}
 		}
 	}
 }

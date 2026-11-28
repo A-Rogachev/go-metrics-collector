@@ -1,10 +1,15 @@
 package main
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/base64"
+	"log/slog"
 	"net/http"
+	"os"
+	"os/signal"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/A-Rogachev/go-metrics-collector/internal/agent"
@@ -16,9 +21,11 @@ import (
 type MetricSender interface {
 	SendMetrics(models.MetricSnapshot, int) map[string]int64
 	SendMetricsPeriodically(
+		context.Context,
 		<-chan models.MetricSnapshot,
 		chan<- map[string]int64,
 		int,
+		*slog.Logger,
 	)
 }
 
@@ -30,7 +37,15 @@ func main() {
 
 	periodicPolling := true
 	pollInterval := time.Duration(cfg.PollConfig.PollInterval) * time.Second
-	tempStorage.Collect(periodicPolling, pollInterval)
+
+	ctx, stop := signal.NotifyContext(
+		context.Background(),
+		os.Interrupt,
+		syscall.SIGTERM,
+	)
+	defer stop()
+
+	tempStorage.Collect(ctx, periodicPolling, pollInterval, logger)
 
 	client := &http.Client{}
 	url := "http://" + cfg.APIConfig.Address + "/updates"
@@ -50,15 +65,18 @@ func main() {
 
 	var wg sync.WaitGroup
 	reportInterval := time.Duration(cfg.ReportConfig.ReportInterval) * time.Second
-	wg.Go(func() { tempStorage.PeriodicalSnapshot(shapshotChan, reportInterval) })
+
+	wg.Go(func() { tempStorage.PeriodicalSnapshot(ctx, shapshotChan, reportInterval, logger) })
 	wg.Go(func() {
 		sender.SendMetricsPeriodically(
+			ctx,
 			shapshotChan,
 			countersChan,
 			cfg.RateLimit,
+			logger,
 		)
 	})
-	wg.Go(func() { tempStorage.SubtractCounters(countersChan) })
+	wg.Go(func() { tempStorage.SubtractCounters(ctx, countersChan, logger) })
 	wg.Wait()
-
+	logger.Info("- - - Agent stopped gracefully")
 }

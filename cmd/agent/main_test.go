@@ -2,6 +2,7 @@ package main
 
 import (
 	"compress/gzip"
+	"context"
 	"crypto/sha256"
 	"crypto/sha512"
 	"encoding/base64"
@@ -29,7 +30,8 @@ func TestMetricStorageCollect(t *testing.T) {
 	storage := agent.NewAgentStorage()
 	pollInterval, polling := 1, false
 
-	storage.Collect(polling, time.Duration(pollInterval))
+	logger := getLogger("info")
+	storage.Collect(context.TODO(), polling, time.Duration(pollInterval), logger)
 	gaugesCount, _ := storage.GetMetricsCount()
 	counterValue, ok := storage.GetCounter("PollCount")
 
