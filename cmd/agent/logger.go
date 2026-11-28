@@ -1,8 +1,18 @@
 package main
 
 import (
+	"fmt"
 	"log/slog"
 	"os"
+	"time"
+
+	"github.com/lmittmann/tint"
+)
+
+const (
+	resetColor  = "\033[0m"
+	greenColor  = "\033[32m"
+	yellowColor = "\033[33m"
 )
 
 func parseLogLevel(level string) slog.Level {
@@ -21,7 +31,14 @@ func parseLogLevel(level string) slog.Level {
 }
 
 func getLogger(level string) *slog.Logger {
-	return slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
-		Level: parseLogLevel(level),
-	}))
+	handler := tint.NewTextHandler(os.Stdout, &tint.Options{
+		Level:      parseLogLevel(level),
+		TimeFormat: time.RFC3339,
+	})
+
+	return slog.New(handler)
+}
+
+func formatLogMsg(msg string) string {
+	return fmt.Sprintf("%s%s%s", yellowColor, msg, resetColor)
 }

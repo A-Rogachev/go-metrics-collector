@@ -199,7 +199,7 @@ func (s *JSONBatchSender) SendMetricsPeriodically(
 	for {
 		select {
 		case <-ctx.Done():
-			logger.Info("- - - sending metrics stopped")
+			logger.Info("sending metrics stopped")
 			return
 		case metrics := <-shapshotChan:
 			metricsToSend := s.prepareMetrics(metrics)

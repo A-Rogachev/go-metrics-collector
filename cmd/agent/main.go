@@ -78,5 +78,5 @@ func main() {
 	})
 	wg.Go(func() { tempStorage.SubtractCounters(ctx, countersChan, logger) })
 	wg.Wait()
-	logger.Info("- - - Agent stopped gracefully")
+	logger.Info("Agent stopped gracefully")
 }
