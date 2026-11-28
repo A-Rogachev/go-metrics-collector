@@ -1,6 +1,9 @@
 package agent
 
 import (
+	"context"
+	"fmt"
+	"log/slog"
 	"maps"
 	"math/rand/v2"
 	"runtime"
@@ -8,6 +11,8 @@ import (
 	"time"
 
 	models "github.com/A-Rogachev/go-metrics-collector/internal/model"
+	"github.com/shirou/gopsutil/v4/cpu"
+	"github.com/shirou/gopsutil/v4/mem"
 )
 
 type AgentStorage struct {
@@ -17,9 +22,10 @@ type AgentStorage struct {
 }
 
 func NewAgentStorage() *AgentStorage {
+
 	return &AgentStorage{
 		gauges:   make(map[string]float64),
-		counters: map[string]int64{"PollCount": 0},
+		counters: map[string]int64{"PollCount": int64(0)},
 	}
 }
 
@@ -64,58 +70,136 @@ func (s *AgentStorage) Snapshot() models.MetricSnapshot {
 	return models.MetricSnapshot{Gauges: gauges, Counters: counters}
 }
 
-func (s *AgentStorage) SubtractCounters(sentCounters map[string]int64) {
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
-
-	for key, value := range sentCounters {
-		s.counters[key] -= value
-		if s.counters[key] < 0 {
-			s.counters[key] = 0
+func (s *AgentStorage) SubtractCounters(
+	ctx context.Context,
+	ch <-chan map[string]int64,
+	logger *slog.Logger,
+) {
+	for {
+		select {
+		case <-ctx.Done():
+			logger.Info("subtraction counters stopped")
+			return
+		case sentCounters := <-ch:
+			s.mutex.Lock()
+			for key, value := range sentCounters {
+				s.counters[key] -= value
+				if s.counters[key] < 0 {
+					s.counters[key] = 0
+				}
+			}
+			s.mutex.Unlock()
 		}
 	}
 }
 
-func (s *AgentStorage) Collect(polling bool, interval int) {
-	for {
-		m := runtime.MemStats{}
-		runtime.ReadMemStats(&m)
-		s.mutex.Lock()
-		s.gauges = map[string]float64{
-			"Alloc":         float64(m.Alloc),
-			"BuckHashSys":   float64(m.BuckHashSys),
-			"Frees":         float64(m.Frees),
-			"GCCPUFraction": m.GCCPUFraction,
-			"GCSys":         float64(m.GCSys),
-			"HeapAlloc":     float64(m.HeapAlloc),
-			"HeapIdle":      float64(m.HeapIdle),
-			"HeapInuse":     float64(m.HeapInuse),
-			"HeapObjects":   float64(m.HeapObjects),
-			"HeapReleased":  float64(m.HeapReleased),
-			"HeapSys":       float64(m.HeapSys),
-			"LastGC":        float64(m.LastGC),
-			"Lookups":       float64(m.Lookups),
-			"MCacheInuse":   float64(m.MCacheInuse),
-			"MCacheSys":     float64(m.MCacheSys),
-			"MSpanInuse":    float64(m.MSpanInuse),
-			"MSpanSys":      float64(m.MSpanSys),
-			"Mallocs":       float64(m.Mallocs),
-			"NextGC":        float64(m.NextGC),
-			"NumForcedGC":   float64(m.NumForcedGC),
-			"NumGC":         float64(m.NumGC),
-			"OtherSys":      float64(m.OtherSys),
-			"PauseTotalNs":  float64(m.PauseTotalNs),
-			"StackInuse":    float64(m.StackInuse),
-			"StackSys":      float64(m.StackSys),
-			"Sys":           float64(m.Sys),
-			"TotalAlloc":    float64(m.TotalAlloc),
-			"RandomValue":   rand.Float64(),
+func (s *AgentStorage) Collect(
+	ctx context.Context,
+	polling bool,
+	interval time.Duration,
+	logger *slog.Logger,
+) {
+	var wg sync.WaitGroup
+
+	wg.Go(func() {
+		for {
+			m := runtime.MemStats{}
+			runtime.ReadMemStats(&m)
+
+			s.mutex.Lock()
+			s.gauges["Alloc"] = float64(m.Alloc)
+			s.gauges["BuckHashSys"] = float64(m.BuckHashSys)
+			s.gauges["Frees"] = float64(m.Frees)
+			s.gauges["GCCPUFraction"] = m.GCCPUFraction
+			s.gauges["GCSys"] = float64(m.GCSys)
+			s.gauges["HeapAlloc"] = float64(m.HeapAlloc)
+			s.gauges["HeapIdle"] = float64(m.HeapIdle)
+			s.gauges["HeapInuse"] = float64(m.HeapInuse)
+			s.gauges["HeapObjects"] = float64(m.HeapObjects)
+			s.gauges["HeapReleased"] = float64(m.HeapReleased)
+			s.gauges["HeapSys"] = float64(m.HeapSys)
+			s.gauges["LastGC"] = float64(m.LastGC)
+			s.gauges["Lookups"] = float64(m.Lookups)
+			s.gauges["MCacheInuse"] = float64(m.MCacheInuse)
+			s.gauges["MCacheSys"] = float64(m.MCacheSys)
+			s.gauges["MSpanInuse"] = float64(m.MSpanInuse)
+			s.gauges["MSpanSys"] = float64(m.MSpanSys)
+			s.gauges["Mallocs"] = float64(m.Mallocs)
+			s.gauges["NextGC"] = float64(m.NextGC)
+			s.gauges["NumForcedGC"] = float64(m.NumForcedGC)
+			s.gauges["NumGC"] = float64(m.NumGC)
+			s.gauges["OtherSys"] = float64(m.OtherSys)
+			s.gauges["PauseTotalNs"] = float64(m.PauseTotalNs)
+			s.gauges["StackInuse"] = float64(m.StackInuse)
+			s.gauges["StackSys"] = float64(m.StackSys)
+			s.gauges["Sys"] = float64(m.Sys)
+			s.gauges["TotalAlloc"] = float64(m.TotalAlloc)
+			s.gauges["RandomValue"] = rand.Float64()
+			s.counters["PollCount"]++
+
+			s.mutex.Unlock()
+			if !polling { // однократное срабатывание при polling == false
+				return
+			}
+			select {
+			case <-ctx.Done():
+				logger.Info("collecting from runtime stopped")
+				return
+			case <-time.After(interval):
+			}
 		}
-		s.counters["PollCount"]++
-		s.mutex.Unlock()
-		if !polling {
-			return
+	})
+
+	wg.Go(func() {
+		for {
+			vm, _ := mem.VirtualMemory()
+			cp, _ := cpu.Percent(0, true)
+
+			s.mutex.Lock()
+			s.gauges["TotalMemory"] = float64(vm.Total)
+			s.gauges["FreeMemory"] = float64(vm.Free)
+			for i, c := range cp {
+				metricName := fmt.Sprintf("CPUutilization%d", i+1)
+				s.gauges[metricName] = float64(c)
+			}
+			s.mutex.Unlock()
+
+			if !polling { // однократное срабатывание при polling == false
+				return
+			}
+			select {
+			case <-ctx.Done():
+				logger.Info("collecting from gopsutil stopped")
+				return
+			case <-time.After(interval):
+			}
 		}
-		time.Sleep(time.Second * time.Duration(interval))
+	})
+
+	if !polling {
+		wg.Wait()
 	}
+}
+
+func (s *AgentStorage) PeriodicalSnapshot(
+	ctx context.Context,
+	ch chan models.MetricSnapshot,
+	period time.Duration,
+	logger *slog.Logger,
+) {
+	for {
+		s.mutex.Lock()
+		gauges, counters := maps.Clone(s.gauges), maps.Clone(s.counters)
+		s.mutex.Unlock()
+
+		ch <- models.MetricSnapshot{Gauges: gauges, Counters: counters}
+
+		select {
+		case <-ctx.Done():
+			logger.Info("periodical snapshot stopped")
+			return
+		case <-time.After(period):
+		}
+	}
+
 }

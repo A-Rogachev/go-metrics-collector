@@ -3,6 +3,8 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -19,6 +21,7 @@ import (
 	"github.com/A-Rogachev/go-metrics-collector/internal/middleware"
 	models "github.com/A-Rogachev/go-metrics-collector/internal/model"
 	services "github.com/A-Rogachev/go-metrics-collector/internal/service"
+	"github.com/A-Rogachev/go-metrics-collector/internal/signing"
 
 	int_storage "github.com/A-Rogachev/go-metrics-collector/internal/storage"
 	"github.com/labstack/echo/v5"
@@ -26,6 +29,8 @@ import (
 )
 
 const skipTestMessage string = "=================== skipping test in short mode"
+const signatureHeader string = "HashSHA256"
+const signatureSecretKey string = "secret_key"
 
 func TestUpdateMetrics(t *testing.T) {
 	if testing.Short() {
@@ -534,6 +539,9 @@ func (c *mockDBHealthChecker) Ping(context.Context) error {
 }
 
 func TestPingDatabase(t *testing.T) {
+	if testing.Short() {
+		t.Skip(skipTestMessage)
+	}
 	tests := []struct {
 		name       string
 		checkerErr error
@@ -594,6 +602,10 @@ func (s *mockMetricSaver) SaveBatchOnUpdate(
 }
 
 func TestBatchMetricUpdate(t *testing.T) {
+	if testing.Short() {
+		t.Skip(skipTestMessage)
+	}
+
 	gaugeValue := float64(12.5)
 	counterValue := int64(7)
 
@@ -647,4 +659,80 @@ func TestBatchMetricUpdate(t *testing.T) {
 	assert.Equal(t, gaugeValue, snapshot.Gauges["Alloc"])
 	assert.Equal(t, counterValue, snapshot.Counters["PollCount"])
 	assert.Equal(t, metrics, saver.batchMetrics)
+}
+
+func generate256Sum(key string, body []byte) string {
+	signer := signing.NewHMACSigner(&key, sha256.New, base64.StdEncoding)
+	value, _ := signer.Sign(body)
+	return value
+
+}
+
+func TestServerSha256Response(t *testing.T) {
+	if testing.Short() {
+		t.Skip(skipTestMessage)
+	}
+
+	var (
+		gaugeValue   = float64(1.23)
+		counterValue = int64(3)
+		URL          = "/update/"
+	)
+
+	tests := []struct {
+		name        string
+		requestBody models.Metric
+	}{
+		{
+			name: "sha256 sum checking #1",
+			requestBody: models.Metric{
+				ID:    "gaugeKey1",
+				MType: "gauge",
+				Value: &gaugeValue,
+			},
+		},
+		{
+			name: "sha256 sum checking #2",
+			requestBody: models.Metric{
+				ID:    "counterKey1",
+				MType: "counter",
+				Delta: &counterValue,
+			},
+		},
+	}
+
+	storage := int_storage.NewMemStorage()
+	fileStorage := int_storage.NewFileStorage("")
+	appLogger := middleware.ZerologAdapter{Logger: getLogger("debug")}
+	saver := services.NewMetricSaver(storage, fileStorage, time.Duration(2), appLogger)
+	e, secretKey := echo.New(), signatureSecretKey
+
+	e.Validator = &handlers.MetricValidator{Validator: validator.New()}
+	e.Use(middleware.MetricSigningMiddleware(
+		appLogger,
+		signing.NewHMACSigner(&secretKey, sha256.New, base64.StdEncoding),
+	))
+
+	e.POST("update/", func(c *echo.Context) error {
+		return handlers.UpdateMetricJSON(c, storage, saver, appLogger)
+	})
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			body, _ := json.Marshal(test.requestBody)
+			request := httptest.NewRequest(http.MethodPost, URL, bytes.NewBuffer(body))
+			request.Header.Set("Content-Type", "application/json")
+			request.Header.Set(signatureHeader, generate256Sum(secretKey, body))
+
+			e.ServeHTTP(w, request)
+			header := w.Header()
+			respBody := w.Body.Bytes()
+			respShaSum := generate256Sum(secretKey, respBody)
+
+			assert.Contains(t, header, "Hashsha256", "header missing in server response")
+			assert.Equal(t, header.Get("Hashsha256"), respShaSum)
+		})
+	}
+
 }

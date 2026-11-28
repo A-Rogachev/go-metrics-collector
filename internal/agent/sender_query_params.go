@@ -13,17 +13,24 @@ type QueryParamsSender struct {
 	client *http.Client
 	logger *slog.Logger
 	URL    string
+	signer Signer
 }
 
-func NewQueryParamsSender(client *http.Client, logger *slog.Logger, baseURL string) *QueryParamsSender {
+func NewQueryParamsSender(
+	client *http.Client,
+	logger *slog.Logger,
+	baseURL string,
+	signer Signer,
+) *QueryParamsSender {
 	return &QueryParamsSender{
 		client: client,
 		logger: logger,
 		URL:    baseURL,
+		signer: signer,
 	}
 }
 
-func (s *QueryParamsSender) SendMetrics(snapshot models.MetricSnapshot) map[string]int64 {
+func (s *QueryParamsSender) SendMetrics(snapshot models.MetricSnapshot, poolSize int) map[string]int64 {
 	sentCounters := make(map[string]int64, 0)
 	for key, value := range snapshot.Gauges {
 		url := fmt.Sprintf("%s/gauge/%s/%f", s.URL, key, value)

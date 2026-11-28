@@ -16,17 +16,24 @@ type JSONSender struct {
 	client *http.Client
 	logger *slog.Logger
 	URL    string
+	signer Signer
 }
 
-func NewJSONSender(client *http.Client, logger *slog.Logger, baseURL string) *JSONSender {
+func NewJSONSender(
+	client *http.Client,
+	logger *slog.Logger,
+	baseURL string,
+	signer Signer,
+) *JSONSender {
 	return &JSONSender{
 		client: client,
 		logger: logger,
 		URL:    baseURL + "/",
+		signer: signer,
 	}
 }
 
-func (s *JSONSender) SendMetrics(snapshot models.MetricSnapshot) map[string]int64 {
+func (s *JSONSender) SendMetrics(snapshot models.MetricSnapshot, poolSize int) map[string]int64 {
 	sentCounters := make(map[string]int64, 0)
 	for key, value := range snapshot.Gauges {
 		reqBody := models.Metric{
@@ -74,6 +81,12 @@ func (s *JSONSender) SendJSONMetric(body models.Metric) error {
 	}
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("Content-Encoding", "gzip")
+
+	metricSign, err := s.signer.Sign(jsonBody)
+	if err == nil {
+		request.Header.Set("HashSHA256", metricSign)
+	}
+
 	response, err := s.client.Do(request)
 	if err != nil {
 		return err
